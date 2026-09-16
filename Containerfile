@@ -249,11 +249,6 @@ RUN printf '%s\n' "${IMAGE_VERSION}" > /usr/lib/bootc-image-version \
 # sense here, on the state that carries a kernel; the split/sealed stages remove it.
 RUN bootc container lint
 
-# Normalize timestamps so the composefs digest computed for the UKI is reproducible.
-RUN find . -xdev \
-        \( -path ./proc -o -path ./sys -o -path ./dev -o -path ./run -o -path ./tmp \) -prune \
-        -o -depth -print0 | xargs -0 -r touch -h -d @0
-
 # ---------------------------------------------------------------------------
 
 # Split the kernel/initramfs out of the rootfs. The UKI embeds them, so the sealed image
