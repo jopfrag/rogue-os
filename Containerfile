@@ -78,6 +78,13 @@ RUN sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf \
         > /etc/pacman.d/cachyos-mirrorlist
 
 # Base system plus the packages bootc needs at runtime and for installation:
+#   - linux-cachyos: the CachyOS-optimized kernel (BORE scheduler), matching the
+#     cachyos-v3 base image (module dir ~/lib/modules/<ver>-cachyos).
+#   - firmware is trimmed to this development laptop (AMD Ryzen 5500U "Lucienne/Green
+#     Sardine" iGPU + Intel Wi-Fi 6 AX200): linux-firmware-amdgpu (green_sardine),
+#     linux-firmware-intel (iwlwifi-Qu + Intel BT), amd-ucode (Ryzen microcode). The
+#     image is intentionally NOT hardware-generic (see hostonly=no note below); re-add
+#     the monolithic linux-firmware if a portable image is needed.
 #   - dracut + cpio: initramfs generation
 #   - ostree/libselinux: bootc dependencies (ostree also provides the bootc backend data)
 #   - filesystem tools: e2fsprogs, xfsprogs, btrfs-progs, dosfstools
@@ -89,7 +96,8 @@ RUN sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf \
 #   - efibootmgr: used by bootctl to manage EFI boot variables during install
 RUN pacman -Syu --noconfirm --needed \
         base \
-        linux linux-firmware \
+        linux-cachyos \
+        linux-firmware-amdgpu linux-firmware-intel amd-ucode \
         dracut cpio \
         ostree libselinux \
         btrfs-progs e2fsprogs xfsprogs dosfstools \
