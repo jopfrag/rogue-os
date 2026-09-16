@@ -209,7 +209,7 @@ determine whether there is a compatible alternative.
 
 Do not silently change the architecture.
 
-The intended architecture for this project is fixed and recorded in PROMPT.md and docs/design.md. In particular:
+The intended architecture for this project is fixed and recorded in docs/design.md. In particular:
 
 - the CachyOS bootc image uses the composefs backend;
 - it boots via systemd-boot with a Unified Kernel Image (UKI);
@@ -217,7 +217,7 @@ The intended architecture for this project is fixed and recorded in PROMPT.md an
 - Secure Boot is out of scope / disabled, and the UKI is unsigned;
 - bootupd must not be present in the image (its presence would select the GRUB/bootupd path instead of systemd-boot).
 
-Changing any of these requires the same investigate -> verify -> record process, and an explicit update to PROMPT.md and docs/design.md. Do not change them silently.
+Changing any of these requires the same investigate -> verify -> record process, and an explicit update to docs/design.md. Do not change them silently.
 
 8. Keep Changes Small
 

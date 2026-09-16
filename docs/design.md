@@ -209,7 +209,7 @@ favour of **`bootcrew/mono`**. Current reference material:
 
 ```
 .
-├── AGENTS.md, PROMPT.md, MEMORY.md, README.md
+├── AGENTS.md, MEMORY.md, README.md
 ├── Containerfile          # CachyOS bootc image build (sealed: composefs + UKI + systemd-boot)
 ├── Containerfile.uki      # read-only reference for the UKI/composefs build
 ├── Makefile               # agent/developer entry points (thin wrappers)
