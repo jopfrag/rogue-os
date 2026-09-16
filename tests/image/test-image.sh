@@ -148,8 +148,8 @@ else
     fail "bootc status --json runs"
 fi
 
-if podman run --rm "${image}" bootc container lint >/dev/null 2>&1; then
-    ok "bootc container lint passes (no fatal errors)"
+if podman run --rm "${image}" bootc container lint --fatal-warnings --skip runtime-deps >/dev/null 2>&1; then
+    ok "bootc container lint passes (warnings fatal, runtime-deps skipped)"
 else
     fail "bootc container lint passes"
 fi

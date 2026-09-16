@@ -305,7 +305,12 @@ RUN printf '%s\n' "${IMAGE_VERSION}" > /usr/lib/bootc-image-version \
 
 # Validate the rootfs against bootc's own invariants before sealing it. lint only makes
 # sense here, on the state that carries a kernel; the split/sealed stages remove it.
-RUN bootc container lint
+#
+# --fatal-warnings turns every warning into a build error, so regressions in the /var
+# layout (var-tmpfiles/var-log) or other lints cannot silently pass again. The one warning
+# we deliberately allow is runtime-deps (missing `chcon`): Arch/CachyOS has no SELinux and
+# `chcon` is only provided by the conflicting coreutils-uutils, so it is intentionally absent.
+RUN bootc container lint --fatal-warnings --skip runtime-deps
 
 # ---------------------------------------------------------------------------
 
@@ -357,5 +362,6 @@ ARG IMAGE_VERSION=1
 LABEL org.cachyos.bootc.image-version="${IMAGE_VERSION}"
 
 # Re-validate the final (split) image: the kernel was removed and the UKI added by the
-# split/ukify steps, so this guards against those steps introducing drift.
-RUN bootc container lint
+# split/ukify steps, so this guards against those steps introducing drift. Same
+# --fatal-warnings --skip runtime-deps rationale as the rootfs-stage lint above.
+RUN bootc container lint --fatal-warnings --skip runtime-deps

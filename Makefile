@@ -42,7 +42,7 @@ build:
 lint: build
 	@hack/lint.sh
 	@echo "==> bootc container lint"
-	@podman run --rm "$(IMAGE)" bootc container lint
+	@podman run --rm "$(IMAGE)" bootc container lint --fatal-warnings --skip runtime-deps
 
 .PHONY: test
 # Full disposable-VM workflow: install -> boot -> smoke test.
