@@ -1,0 +1,16 @@
+# Build artifacts and local test state
+
+# Local OCI registry data
+/registry-data/
+# Disposable VM disks and runtime state (host /var/tmp is used at runtime; this is for
+# anything kept inside the repo)
+/vm/
+# Failure artifacts / diagnostics
+/artifacts/
+# Local build outputs
+/output/
+*.qcow2
+*.raw
+*.img
+# SSH test keys
+/tests/keys/
