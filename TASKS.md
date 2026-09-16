@@ -30,11 +30,10 @@
 
 ## In Progress
 
-- (none)
+- [ ] Task 28 — Replace password bring-up auth with durable key injection (composefs)
 
 ## Remaining
 
-- [ ] Task 28 — Replace password bring-up auth with durable key injection (composefs)
 
 ## Blocked
 

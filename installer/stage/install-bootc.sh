@@ -190,12 +190,30 @@ fi
 # (crates/lib/src/install.rs: inject_root_ssh_authorized_keys is called from
 # install_container, which the composefs path does not use). For the composefs backend we
 # replicate bootc's own mechanism ourselves: write a systemd-tmpfiles drop-in into the
-# target's /etc/tmpfiles.d that recreates /root/.ssh/authorized_keys on every boot. /etc is
-# writable machine-local state on a composefs system, so the drop-in persists and is
-# reapplied on each boot and across updates.
+# target's /etc/tmpfiles.d that recreates /root/.ssh/authorized_keys on every boot.
+#
+# On the composefs backend /etc is NOT the plain ${target}/etc directory. At boot the
+# initramfs bind-mounts the running /etc from the per-deployment state directory
+# ${target}/state/deploy/<composefs-digest>/etc (see bootc initramfs `mount_subdir` and
+# `bootc_composefs/state.rs`; the deployment digest equals the `composefs=` value baked into
+# the UKI cmdline). Writes to ${target}/etc land in a directory nothing mounts, so the key
+# would never appear on the running system. The same per-deployment directory is carried
+# across `bootc switch`/upgrade via the three-way /etc merge, so a drop-in placed there is
+# durable. There is exactly one deployment dir after a clean install, so we resolve it by
+# globbing state/deploy/*.
 if [[ -n "${root_ssh_key}" ]]; then
     log "injecting root SSH authorized_keys via tmpfiles"
     [[ -f "${root_ssh_key}" ]] || die "root SSH key not found: ${root_ssh_key}"
+
+    # Locate the single composefs deployment's writable /etc backing store.
+    deploy_etc=""
+    for d in "${target}"/state/deploy/*; do
+        [[ -d "${d}/etc" ]] || continue
+        [[ -n "${deploy_etc}" ]] && die "multiple deployment state dirs under ${target}/state/deploy"
+        deploy_etc="${d}/etc"
+    done
+    [[ -n "${deploy_etc}" ]] || die "no deployment state dir (${target}/state/deploy/*/etc) found"
+
     # systemd tmpfiles "f~" lines take the file contents base64-encoded (see systemd
     # CREDENTIALS / tmpfiles.d(5)).
     b64="$(base64 -w0 <"${root_ssh_key}")"
@@ -205,10 +223,13 @@ if [[ -n "${root_ssh_key}" ]]; then
     else
         roothome="root"
     fi
-    install -d -m 0755 "${target}/etc/tmpfiles.d"
-    printf 'f~ /%s/.ssh/authorized_keys 600 root root - %s\n' "${roothome}" "${b64}" \
-        > "${target}/etc/tmpfiles.d/bootc-root-ssh.conf"
-    log "wrote ${target}/etc/tmpfiles.d/bootc-root-ssh.conf (-> /${roothome}/.ssh/authorized_keys)"
+    # Declare the parent directory too (`d` line): tmpfiles "f~" does not create parent
+    # directories, and /root/.ssh does not exist on a pristine bootc image.
+    install -d -m 0755 "${deploy_etc}/tmpfiles.d"
+    printf 'd /%s/.ssh 0700 root root -\nf~ /%s/.ssh/authorized_keys 600 root root - %s\n' \
+        "${roothome}" "${roothome}" "${b64}" \
+        > "${deploy_etc}/tmpfiles.d/bootc-root-ssh.conf"
+    log "wrote ${deploy_etc}/tmpfiles.d/bootc-root-ssh.conf (-> /${roothome}/.ssh/authorized_keys)"
 fi
 
 # Finalization (replaces bootc's skipped --skip-finalize step): flush writes, then trim and

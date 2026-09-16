@@ -139,17 +139,14 @@ RUN systemctl enable systemd-networkd systemd-resolved systemd-timesyncd sshd \
 RUN echo "uninitialized" > /etc/machine-id \
     && ln -sf /usr/share/zoneinfo/UTC /etc/localtime
 
-# SSH: allow root login. During bring-up we use a password (Option B) so that the test
-# harness can log in without depending on key injection; this isolates whether the SSH
-# stack works at all before we rebuild key provisioning. Host keys are generated here
-# (ssh-keygen -A) so the system is immediately reachable, matching Containerfile.uki.
-# NOTE: the password below is a fixed, well-known bring-up credential for the disposable
-# test VM only; it is intended to be replaced by key-based auth later.
+# SSH: allow root login via key only. The test harness injects an ephemeral public key at
+# install time (see installer/stage/install-bootc.sh), so no password is needed and password
+# auth is disabled. Host keys are generated here (ssh-keygen -A) so the system is immediately
+# reachable, matching Containerfile.uki.
 RUN install -d /etc/ssh/sshd_config.d \
-    && printf 'PermitRootLogin yes\nPasswordAuthentication yes\n' \
+    && printf 'PermitRootLogin prohibit-password\nPasswordAuthentication no\n' \
         > /etc/ssh/sshd_config.d/10-bootc.conf \
-    && ssh-keygen -A \
-    && echo 'root:bootc-test' | chpasswd
+    && ssh-keygen -A
 
 # Bring up wired ethernet via DHCP. systemd-networkd ignores interfaces without a
 # .network file; match by Type=ether to catch eth0/ens3/etc. (QEMU virtio NIC included).

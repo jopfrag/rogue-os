@@ -136,8 +136,7 @@ echo "    console: ${console_log}"
 cat >"${state_file}" <<EOF
 VM_NAME=${vm}
 VM_SSH_KEY=${ssh_key}
-VM_SSH_AUTH=password
-VM_SSH_PASS=bootc-test
+VM_SSH_AUTH=key
 VM_ARTIFACTS=${artifacts}
 VM_IMAGE_REF=${vm_imgref}
 EOF
