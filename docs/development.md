@@ -162,9 +162,12 @@ Notes (verified):
 - **`--skip-finalize` is used**: bootc's built-in `fsfreeze` on the container-bind-mounted
   target hangs; the installer does `fstrim` + `remount,ro` itself afterwards.
 - **`bootc install finalize` is ostree-only** and is skipped for the composefs backend.
-- **SSH bring-up uses a password** (`root:bootc-test`): `--root-ssh-authorized-keys` is
-  ostree-only, and a tmpfiles drop-in written to the target's `/etc` did not persist into the
-  composed `/etc` of the running system.
+- **SSH is key-only.** `--root-ssh-authorized-keys` is ostree-only, so the installer
+  replicates it: it writes a `d`+"f~" tmpfiles drop-in into the composefs deployment's
+  per-deployment `/etc` (`state/deploy/<digest>/etc/tmpfiles.d/`, where `<digest>` is the
+  `composefs=` value), not the plain `/target/etc` (which is never mounted at boot). `/etc`
+  is carried across updates via the three-way merge, so the key survives `bootc switch` and
+  rollback. The image has no password and `PasswordAuthentication no`.
 - **Update/rollback work**: `bootc switch` to a v2 image stages a composefs/UKI deployment
   (`bootType: Uki`, `missingVerityAllowed: false`); reboot boots v2; `bootc rollback` returns
   to v1. The plain-HTTP test registry requires an `insecure = true` entry on the guest.

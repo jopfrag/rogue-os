@@ -30,26 +30,42 @@ ssh_guest_ip() {
     return 1
 }
 
-# _ssh_opts: common non-interactive options.
+# _ssh_opts: common non-interactive options. ServerAliveInterval/CountMax keep long-running
+# remote commands (e.g. `bootc switch`) from being dropped by an idle/transient network reset.
 _ssh_opts() {
     printf '%s\n' \
         -o BatchMode=yes \
         -o StrictHostKeyChecking=no \
         -o UserKnownHostsFile=/dev/null \
         -o LogLevel=ERROR \
-        -o ConnectTimeout=15
+        -o ConnectTimeout=15 \
+        -o ServerAliveInterval=15 \
+        -o ServerAliveCountMax=20
 }
 
 # ssh_guest <vm-name> <command...>
-# Run a command over SSH using the configured key.
+# Run a command over SSH using the configured key. Transient connection resets (exit 255,
+# e.g. "Connection reset by peer" during heavy guest work such as `bootc switch`) are retried
+# a few times; a non-zero exit from the remote command itself is not retried.
 ssh_guest() {
     local name="$1"; shift
     [[ -n "${VM_SSH_KEY}" ]] || { echo "no SSH key configured (VM_SSH_KEY)" >&2; return 1; }
-    local ip
+    local ip rc
     ip="$(ssh_guest_ip "${name}")" || { echo "sshd not reachable on ${name}" >&2; return 1; }
 
     local -a opts
     mapfile -t opts < <(_ssh_opts)
-    ssh "${opts[@]}" -o IdentitiesOnly=yes -i "${VM_SSH_KEY}" \
-        "${VM_SSH_USER}@${ip}" "$@"
+    local _attempt
+    for _attempt in 1 2 3 4 5; do
+        set +e
+        ssh "${opts[@]}" -o IdentitiesOnly=yes -i "${VM_SSH_KEY}" \
+            "${VM_SSH_USER}@${ip}" "$@"
+        rc=$?
+        set -e
+        # 255 is an SSH-level connection error (not the remote command's exit code), so it
+        # may be transient; retry. Preserve the remote command's own exit status.
+        [[ "${rc}" -ne 255 ]] && return "${rc}"
+        sleep 5
+    done
+    return "${rc}"
 }

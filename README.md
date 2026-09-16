@@ -21,10 +21,9 @@ boots from disk, is reachable over SSH, and passes the automated smoke, update a
 tests. See `TASKS.md` for current progress and `docs/` for design and environment
 documentation.
 
-> Bring-up note: SSH currently uses a fixed password baked into the image
-> (`root:bootc-test`, `PermitRootLogin yes`) so the harness can log in while durable key
-> injection for the composefs backend is reworked (see TASKS.md Task 28). This is a test
-> credential for the disposable VM only.
+> SSH is key-only: the harness injects an ephemeral public key at install time (a tmpfiles
+> drop-in placed in the composefs deployment's per-deployment `/etc`), so no password is baked
+> into the image and password auth is disabled (`PasswordAuthentication no`).
 
 ## Prerequisites
 

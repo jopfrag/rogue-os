@@ -339,9 +339,10 @@ CachyOS does not provide. This is why the project moved to the sealed composefs 
 
 ## Open questions to resolve in later tasks
 
-- **Durable root SSH key injection for the composefs backend (Task 28).** `bootc install
-  --root-ssh-authorized-keys` is ostree-only, and writing a tmpfiles drop-in into the target's
-  `/etc` did not survive into the composed `/etc` of the running system. Bring-up currently
-  uses a baked-in password; replace with durable key provisioning.
+- **(Resolved, Task 28) Durable root SSH key injection for the composefs backend.**
+  `--root-ssh-authorized-keys` is ostree-only, so the installer writes a `d`+"f~" tmpfiles
+  drop-in into the per-deployment `/etc` (`state/deploy/<digest>/etc/tmpfiles.d/`); the key
+  survives `bootc switch` and rollback via the three-way `/etc` merge. No password is baked
+  into the image.
 - (Resolved) registry reachability: run the registry on the libvirt bridge address
   `192.168.122.1:5000` with firewalld treated as stopped; verified in Task 1.

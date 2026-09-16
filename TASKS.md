@@ -27,13 +27,15 @@
 - [x] Task 21 — Implement rollback testing
 - [x] Task 22 — Provide simple make/hack commands
 - [x] Task 23 — Document the final workflow
+- [x] Task 28 — Replace password bring-up auth with durable key injection (composefs)
 
 ## In Progress
 
-- [ ] Task 28 — Replace password bring-up auth with durable key injection (composefs)
+- (none)
 
 ## Remaining
 
+- (none)
 
 ## Blocked
 
@@ -306,15 +308,25 @@
   disk full). Fixed by passing **`--skip-finalize`** and doing `fstrim` + `remount,ro`
   ourselves on the installer side, where we control the mounts. Applied **after** the SSH-key
   injection so the target is still writable for that write.
-- **SSH bring-up uses a password (Option B).** `--root-ssh-authorized-keys` is **not
-  implemented for the composefs backend** (bootc calls `inject_root_ssh_authorized_keys` only
-  in the ostree `install_container` path). We could not get key injection to stick: writing a
-  tmpfiles drop-in to the target's `/etc/tmpfiles.d/` did **not** appear on the running
-  system (`/etc` is composed/bind-mounted), and sshd rejected the key. For bring-up the image
-  now bakes `PermitRootLogin yes` + `PasswordAuthentication yes` + `chpasswd root:bootc-test`
-  and `ssh-keygen -A` (mirrors `Containerfile.uki`). This isolated the failure to key
-  provisioning (not SSH): password login works, `sshd` is fine, the sealed system is correct.
-  Durable key injection is tracked as **Task 28**.
+- **Task 28 (durable root SSH key injection) — root cause and fix.** `--root-ssh-authorized-keys`
+  is **not implemented for the composefs backend** (bootc calls `inject_root_ssh_authorized_keys`
+  only in the ostree `install_container` path), so the installer replicates it. The original
+  bug: the drop-in was written to `${target}/etc/tmpfiles.d/`, but on composefs `/etc` is
+  **not** that directory — the initramfs bind-mounts the running `/etc` from the
+  per-deployment state dir `state/deploy/<composefs-digest>/etc` (bootc `initramfs`
+  `mount_subdir` + `bootc_composefs/state.rs`; the deployment digest equals the `composefs=`
+  value in the UKI cmdline). Writes to `${target}/etc` land where nothing mounts, so the key
+  never appeared. Fix: resolve the single `state/deploy/*/etc` after install and write the
+  drop-in there as a `d`+"f~" pair (parent `.ssh` dir + base64-encoded `authorized_keys`),
+  matching bootc's own `osconfig.rs` and the systemd CREDENTIALS example. `/etc` is carried
+  across `bootc switch`/upgrade via the three-way `/etc` merge (`etc-merge`, `finalize.rs`),
+  so the key is durable. The image now uses `PasswordAuthentication no` +
+  `PermitRootLogin prohibit-password` (no baked password); the harness is key-only.
+- **Verified (Task 28):** `make test` (install→boot→smoke) passes 16/16 with **key-only**
+  auth, and `make vm-rollback` passes end-to-end: v1 → `bootc switch` v2 → reboot → v2 booted
+  (key works) → `bootc rollback` → reboot → v1 booted (key works). The injected key survives
+  both an upgrade and a rollback. (The harness retries transient SSH `Connection reset by peer`
+  during the long `bootc switch` pull; see `hack/lib/ssh.sh`.)
 - **Sealed state confirmed over SSH:** `/` is `composefs:<digest>` mounted `ro`, `/sysroot`
   ext4 `ro`, `/etc`+`/var` ext4 `rw`, cmdline `composefs=<sha512>` with **no `?`** (fs-verity
   enforced), `bootc status` shows a booted composefs deployment.
@@ -322,8 +334,8 @@
   `/run/host`; libvirt also refuses a pre-created log path), so we capture via `virsh console`
   with a retry loop (`vm_capture_console`). This reliably captured install and boot logs.
 - **Harness:** `hack/lib/vm.sh` (VM lifecycle, `vm_boot_from_disk`, console), `hack/lib/ssh.sh`
-  (key/password SSH, `ssh_guest_ip`), `tests/vm/{install,boot,smoke,run}.sh`. `run.sh` chains
-  install → boot → smoke and cleans up; artifacts under `artifacts/<run-id>/`.
+  (key-only SSH with transient-reset retry, `ssh_guest_ip`), `tests/vm/{install,boot,smoke,run}.sh`.
+  `run.sh` chains install → boot → smoke and cleans up; artifacts under `artifacts/<run-id>/`.
 - **Verified (Tasks 14–19):** `tests/vm/run.sh` completes install → boot → **16/16 smoke
   checks** automatically and removes the VM. Diagnostics collection (`vm-diagnostics.txt` on
   smoke failure) exercised and working.
@@ -359,5 +371,6 @@
 - **`make test` verified end-to-end with a freshly built image:** install → boot → **16/16**
   smoke checks → VM destroyed. `make lint` is clean (shellcheck passes).
 - `make vm-shell` implemented (`hack/vm-shell.sh`): interactive SSH to a running test VM.
-- All tasks complete except **Task 28** (durable composefs SSH key injection; bring-up uses a
-  baked-in password for now).
+- **All tasks complete.** Task 28 (durable composefs SSH key injection) is done and verified;
+  the image and installer no longer use a bake-in password, and the harness authenticates via
+  an ephemeral key that survives update and rollback.
