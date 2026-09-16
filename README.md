@@ -18,8 +18,8 @@ prebuilt CachyOS bootc image, and it does **not** use `bootc-image-builder`.
 The full workflow works end-to-end: the sealed image builds, installs into a disposable VM
 via the custom installer ISO (`bootc install to-filesystem`, composefs backend + systemd-boot),
 boots from disk, is reachable over SSH, and passes the automated smoke, update and rollback
-tests. See `TASKS.md` for current progress and `docs/` for design and environment
-documentation.
+tests. See `MEMORY.md` for distilled project knowledge and `docs/` for design and
+environment documentation.
 
 > SSH is key-only: the harness injects an ephemeral public key at install time (a tmpfiles
 > drop-in placed in the composefs deployment's per-deployment `/etc`), so no password is baked

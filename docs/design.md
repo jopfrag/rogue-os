@@ -123,7 +123,7 @@ Required/important options:
   filesystem UUID. An empty `--root-mount-spec=""` enables DPS auto-discovery.
 - `--root-ssh-authorized-keys <path>`: inject root SSH keys via `systemd-tmpfiles`
   (`/etc/tmpfiles.d/bootc-root-ssh.conf`). **Only implemented for the ostree backend**, so it
-  has no effect on our composefs/sealed image (see TASKS.md Task 28).
+  has no effect on our composefs/sealed image (see "Durable root SSH key injection" below).
 - `--bootloader <grub|grub-cc|systemd|none>`: bootloader selection (auto-derived; `systemd`
   for the composefs+UKI path).
 - `--skip-finalize`: skip bootc's fstrim + read-only remount + fsfreeze. **Used for our
@@ -209,7 +209,7 @@ favour of **`bootcrew/mono`**. Current reference material:
 
 ```
 .
-├── AGENTS.md, PROMPT.md, TASKS.md, README.md
+├── AGENTS.md, PROMPT.md, MEMORY.md, README.md
 ├── Containerfile          # CachyOS bootc image build (sealed: composefs + UKI + systemd-boot)
 ├── Containerfile.uki      # read-only reference for the UKI/composefs build
 ├── Makefile               # agent/developer entry points (thin wrappers)
