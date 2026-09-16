@@ -24,24 +24,42 @@
 # composefs + UKI pattern in Containerfile.uki (read-only reference in this repo).
 # Attribution: see contrib/ATTRIBUTION.md.
 
-# Pin the bootc version so builds are reproducible. Bump deliberately.
+# Pin the bootc version to an exact commit so builds are reproducible and immune to
+# tag moves. This is the dereferenced commit for the v1.16.13 annotated tag. When bumping,
+# update both BOOTC_VERSION (descriptive) and BOOTC_COMMIT (the immutable ref).
 ARG BOOTC_VERSION=v1.16.13
+ARG BOOTC_COMMIT=fa0d3f9cb9a0ce3b4d1dc2607a0bf5e31b822f60
+
+# CachyOS mirror(s) to use. Empty (default) means "use the base image's own mirrorlist",
+# which carries ~40 mirrors and fallback. Set this to space-separated `Server = ` URLs to
+# pin a specific mirror, e.g. to work around a transient mismatch (upstream mirror
+# flakiness is recurring). Each entry may use the pacman `$arch`/`$repo` placeholders.
+ARG CACHYOS_MIRROR=""
+
+# Kernel + firmware package set. Defaults to the CachyOS kernel plus firmware for this
+# development laptop (AMD 5500U 'Green Sardine' iGPU + Intel AX200). Override with a space
+# separated package list to build a portable image (e.g. use the monolithic linux-firmware).
+ARG KERNEL_PKGS="linux-cachyos"
+ARG FIRMWARE_PKGS="linux-firmware-amdgpu linux-firmware-intel amd-ucode"
 
 FROM docker.io/cachyos/cachyos-v3:latest AS bootc-builder
 
 ARG BOOTC_VERSION
+ARG BOOTC_COMMIT
+ARG CACHYOS_MIRROR
 
 # The base image's pacman sandboxes downloads and package hooks (Landlock/seccomp).
 # That sandbox cannot isolate the network inside a rootless podman build, which makes
 # package hooks (depmod, dracut, systemd) fail. Disable it for the image build.
 #
-# Mirror workaround: the base image's default CachyOS mirrorlist lists the cdn77 CDN
-# first, which has recently served a `cachyos.db`/`.sig` pair that does not match
-# (`signature ... is invalid`), and pacman does not fall through past a bad signature.
-# Pin consistent tier-1 origin mirrors instead. Remove this once upstream restores cdn77.
+# Mirror workaround: optionally pin specific CachyOS mirrors (see CACHYOS_MIRROR). When
+# CACHYOS_MIRROR is empty, the base image's default mirrorlist (with fallback) is used;
+# this is the robust default given recurring upstream mirror flakiness.
 RUN sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf \
-    && printf 'Server = https://us.cachyos.org/repo/$arch/$repo\nServer = https://at.cachyos.org/repo/$arch/$repo\n' \
-        > /etc/pacman.d/cachyos-mirrorlist
+    && if [[ -n "${CACHYOS_MIRROR}" ]]; then \
+         : > /etc/pacman.d/cachyos-mirrorlist; \
+         for m in ${CACHYOS_MIRROR}; do printf 'Server = %s\n' "$m" >> /etc/pacman.d/cachyos-mirrorlist; done; \
+       fi
 
 # Build dependencies for bootc. libselinux headers and clang/libclang are required by
 # selinux-sys/bindgen; pkgconf, ostree and glibc complete the native dependency set.
@@ -62,6 +80,7 @@ ENV CARGO_PROFILE_RELEASE_DEBUG=false \
 
 RUN git clone --depth 1 --branch "${BOOTC_VERSION}" \
         https://github.com/bootc-dev/bootc.git /tmp/bootc \
+    && git -C /tmp/bootc checkout "${BOOTC_COMMIT}" \
     && make -C /tmp/bootc bin DESTDIR=/output \
     && make -C /tmp/bootc install DESTDIR=/output \
     && rm -rf /tmp/bootc
@@ -70,21 +89,24 @@ RUN git clone --depth 1 --branch "${BOOTC_VERSION}" \
 
 FROM docker.io/cachyos/cachyos-v3:latest AS rootfs
 
+ARG CACHYOS_MIRROR
+ARG KERNEL_PKGS
+ARG FIRMWARE_PKGS
+
 # See note in the builder stage: pacman's sandbox cannot work inside a rootless podman
-# build, and its failure skips package hooks (depmod, dracut, systemd). The CachyOS
-# mirror pin is also repeated here (see the builder stage comment).
+# build, and its failure skips package hooks (depmod, dracut, systemd). The optional
+# CACHYOS_MIRROR pin is also repeated here (see the builder stage comment).
 RUN sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf \
-    && printf 'Server = https://us.cachyos.org/repo/$arch/$repo\nServer = https://at.cachyos.org/repo/$arch/$repo\n' \
-        > /etc/pacman.d/cachyos-mirrorlist
+    && if [[ -n "${CACHYOS_MIRROR}" ]]; then \
+         : > /etc/pacman.d/cachyos-mirrorlist; \
+         for m in ${CACHYOS_MIRROR}; do printf 'Server = %s\n' "$m" >> /etc/pacman.d/cachyos-mirrorlist; done; \
+       fi
 
 # Base system plus the packages bootc needs at runtime and for installation:
-#   - linux-cachyos: the CachyOS-optimized kernel (BORE scheduler), matching the
-#     cachyos-v3 base image (module dir ~/lib/modules/<ver>-cachyos).
-#   - firmware is trimmed to this development laptop (AMD Ryzen 5500U "Lucienne/Green
-#     Sardine" iGPU + Intel Wi-Fi 6 AX200): linux-firmware-amdgpu (green_sardine),
-#     linux-firmware-intel (iwlwifi-Qu + Intel BT), amd-ucode (Ryzen microcode). The
-#     image is intentionally NOT hardware-generic (see hostonly=no note below); re-add
-#     the monolithic linux-firmware if a portable image is needed.
+#   - KERNEL_PKGS: kernel package(s); defaults to linux-cachyos (the CachyOS BORE kernel).
+#   - FIRMWARE_PKGS: firmware packages; defaults to a trimmed set for this development
+#     laptop (AMD 5500U "Green Sardine" iGPU + Intel AX200). Override via --build-arg to
+#     build a portable image (e.g. FIRMWARE_PKGS="linux-firmware").
 #   - dracut + cpio: initramfs generation
 #   - ostree/libselinux: bootc dependencies (ostree also provides the bootc backend data)
 #   - filesystem tools: e2fsprogs, xfsprogs, btrfs-progs, dosfstools
@@ -96,8 +118,8 @@ RUN sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf \
 #   - efibootmgr: used by bootctl to manage EFI boot variables during install
 RUN pacman -Syu --noconfirm --needed \
         base \
-        linux-cachyos \
-        linux-firmware-amdgpu linux-firmware-intel amd-ucode \
+        ${KERNEL_PKGS} \
+        ${FIRMWARE_PKGS} \
         dracut cpio \
         ostree libselinux \
         btrfs-progs e2fsprogs xfsprogs dosfstools \
@@ -106,6 +128,7 @@ RUN pacman -Syu --noconfirm --needed \
         dbus dbus-glib glib2 shadow \
         openssh \
         efibootmgr \
+        cachyos-rate-mirrors \
     && pacman -Scc --noconfirm
 
 # Move pacman's mutable state out of /var so the image's /var is (nearly) empty, as
@@ -113,13 +136,22 @@ RUN pacman -Syu --noconfirm --needed \
 # state and only the image's initial /var content is provisioned; keeping the package
 # database and cache there would interfere. Adapted from bootcrew/arch-bootc and
 # bootcrew/mono (Apache-2.0). See contrib/ATTRIBUTION.md.
-RUN grep "= */var" /etc/pacman.conf \
-        | sed "/= *\/var/s/.*=// ; s/ //" \
-        | xargs -n1 sh -c 'mkdir -p "/usr/lib/sysimage/$(dirname "$(echo "$1" | sed "s@/var/@@")")" && mv "$1" "/usr/lib/sysimage/$(echo "$1" | sed "s@/var/@@")"' '' \
+#
+# The three standard writable locations (DBPath, CacheDir, LogFile) are relocated
+# explicitly rather than parsed out of pacman.conf, so this does not drift with the base.
+# Content is moved out of /var (not copied) so the image's /var stays empty as bootc
+# requires; any populated dir is re-created empty under /usr/lib/sysimage.
+RUN install -d /usr/lib/sysimage/pacman \
+    && if [[ -d /var/lib/pacman ]]; then mv /var/lib/pacman /usr/lib/sysimage/pacman/lib; else install -d /usr/lib/sysimage/pacman/lib; fi \
+    && install -d /usr/lib/sysimage/cache/pacman \
+    && if [[ -d /var/cache/pacman/pkg ]]; then mv /var/cache/pacman/pkg /usr/lib/sysimage/cache/pacman/pkg; else install -d /usr/lib/sysimage/cache/pacman/pkg; fi \
+    && install -d /usr/lib/sysimage/log \
+    && if [[ -f /var/log/pacman.log ]]; then mv /var/log/pacman.log /usr/lib/sysimage/log/pacman.log; fi \
     && sed -i \
-        -e "/= *\/var/ s/^#//" \
-        -e "s@= */var@= /usr/lib/sysimage@g" \
-        -e "/DownloadUser/d" \
+        -e 's@^\(#\)\?DBPath.*@DBPath = /usr/lib/sysimage/pacman/lib/@' \
+        -e 's@^\(#\)\?CacheDir.*@CacheDir = /usr/lib/sysimage/cache/pacman/pkg/@' \
+        -e 's@^\(#\)\?LogFile.*@LogFile = /usr/lib/sysimage/log/pacman.log@' \
+        -e '/DownloadUser/d' \
         /etc/pacman.conf
 
 # Install bootc (binary, systemd units, dracut module, baseimage reference content).
@@ -140,7 +172,14 @@ RUN install -d /usr/lib/bootc/kargs.d \
         > /usr/lib/bootc/kargs.d/00-console.toml
 
 # Enable the services a bootable system needs and avoid first-boot interactive prompts.
+# systemd-boot-update copies the current systemd-bootx64.efi onto the ESP on each boot,
+# keeping the boot *loader* in sync with the image across updates (bootc only manages the
+# UKI, not the loader binary). Enabling it mirrors the Fedora reference Containerfile.uki.
+# cachyos-rate-mirrors.timer periodically re-ranks mirrors so the installed system keeps a
+# fast, working mirrorlist without manual intervention (see cachyos-rate-mirrors.service).
 RUN systemctl enable systemd-networkd systemd-resolved systemd-timesyncd sshd \
+        systemd-boot-update.service \
+        cachyos-rate-mirrors.timer \
     && systemctl mask systemd-firstboot.service
 
 # Machine identity: generated on first boot; UTC timezone so nothing prompts.
@@ -149,12 +188,18 @@ RUN echo "uninitialized" > /etc/machine-id \
 
 # SSH: allow root login via key only. The test harness injects an ephemeral public key at
 # install time (see installer/stage/install-bootc.sh), so no password is needed and password
-# auth is disabled. Host keys are generated here (ssh-keygen -A) so the system is immediately
-# reachable, matching Containerfile.uki.
+# auth is disabled.
+#
+# Host keys are NOT baked into the image: every install of a shared image would otherwise
+# share the same host keys (MITM-able). We remove any pre-generated keys and rely on
+# sshdgenkeys.service (Arch's host-key generator) to create machine-unique keys on first
+# boot. sshd refuses to start until its host keys exist, so this also acts as a
+# first-boot gate.
 RUN install -d /etc/ssh/sshd_config.d \
     && printf 'PermitRootLogin prohibit-password\nPasswordAuthentication no\n' \
         > /etc/ssh/sshd_config.d/10-bootc.conf \
-    && ssh-keygen -A
+    && rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub \
+    && systemctl enable sshdgenkeys.service
 
 # Bring up wired ethernet via DHCP. systemd-networkd ignores interfaces without a
 # .network file; match by Type=ether to catch eth0/ens3/etc. (QEMU virtio NIC included).
@@ -176,9 +221,14 @@ RUN install -d /usr/lib/composefs \
 # Generate the initramfs with the ostree + bootc dracut modules. hostonly=no keeps the
 # image generic. dracut must be told the kernel version explicitly (its default targets
 # the running kernel, which is not the image's kernel).
+#
+# There must be exactly one kernel: bootc's split-kernel-and-rootfs/ukify assume a single
+# kernel, and `head -n1` would otherwise silently pick an arbitrary one and produce a UKI
+# that does not match the modules that were loaded. Fail loudly instead.
 RUN printf 'hostonly=no\ncompress=zstd\nadd_dracutmodules+=" ostree bootc "\n' \
         > /usr/lib/dracut/dracut.conf.d/10-bootc.conf \
-    && kver="$(ls /usr/lib/modules | head -n1)" \
+    && test "$(find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 1 \
+    && kver="$(ls /usr/lib/modules)" \
     && dracut --force "/usr/lib/modules/${kver}/initramfs.img" "${kver}"
 
 # Base image root filesystem layout required by bootc (ostree symlink, /var as the
@@ -272,11 +322,15 @@ RUN install -d /kernel \
 # unsigned and Secure Boot is not used.
 FROM docker.io/cachyos/cachyos-v3:latest AS sealed-uki
 
+ARG CACHYOS_MIRROR
+
 # ukify is required. bootc is copied from the builder so the same pinned version is used;
 # the bootc binary links libselinux at runtime, so it must be installed here as well.
 RUN sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf \
-    && printf 'Server = https://us.cachyos.org/repo/$arch/$repo\nServer = https://at.cachyos.org/repo/$arch/$repo\n' \
-        > /etc/pacman.d/cachyos-mirrorlist \
+    && if [[ -n "${CACHYOS_MIRROR}" ]]; then \
+         : > /etc/pacman.d/cachyos-mirrorlist; \
+         for m in ${CACHYOS_MIRROR}; do printf 'Server = %s\n' "$m" >> /etc/pacman.d/cachyos-mirrorlist; done; \
+       fi \
     && pacman -Sy --noconfirm --needed systemd-ukify ostree libselinux \
     && pacman -Scc --noconfirm
 COPY --from=bootc-builder /output/usr/bin/bootc /usr/bin/bootc
@@ -301,3 +355,7 @@ COPY --from=sealed-uki /out/*.efi /boot/EFI/Linux/
 LABEL containers.bootc=1
 ARG IMAGE_VERSION=1
 LABEL org.cachyos.bootc.image-version="${IMAGE_VERSION}"
+
+# Re-validate the final (split) image: the kernel was removed and the UKI added by the
+# split/ukify steps, so this guards against those steps introducing drift.
+RUN bootc container lint
