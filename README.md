@@ -10,6 +10,9 @@ Unified Kernel Image and enforced via fs-verity. **Secure Boot is not used** and
 This repository contains the implementation of the image build itself; it does **not** wrap a
 prebuilt CachyOS bootc image, and it does **not** use `bootc-image-builder`.
 
+To install the image by hand from a stock Arch Linux ISO (no custom installer ISO), see
+[`INSTALL.md`](INSTALL.md).
+
 ## Two targets
 
 This repository exposes two independent targets that share only `Containerfile`:

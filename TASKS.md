@@ -2,77 +2,135 @@
 
 Source of truth for project progress. One task may be In Progress at a time.
 
-Scope: refactor the repository into two independent targets (CI image build,
-disposable-VM installation test) that share only `Containerfile`.
-See `PROMPT.md` for the objective and `AGENTS.md` for how to work.
+Scope: document manual installation of the sealed CachyOS bootc image from a stock Arch
+Linux installation ISO (`INSTALL.md`). See `PROMPT.md` for the objective and `AGENTS.md`
+for how to work.
 
 ## Completed
 
-- [x] Task 0.1 — Create `PROMPT.md` and `TASKS.md`.
-      Evidence: `PROMPT.md` describes the two targets and the verified environment facts.
-      `TASKS.md` (this file) lists the phases. No source/build/test files changed yet.
+- [x] Task 1 — Verify live-environment tooling and command syntax.
+      Evidence: all checks run in disposable `docker.io/archlinux:latest` containers
+      (podman 5.8.4). Logs kept under `artifacts/task1-live-tools/` (gitignored).
+      * Packages install and are present in the live environment:
+        - releng ISO set (upstream `configs/releng/packages.x86_64`) already contains
+          `parted` (3.7), `gptfdisk`/`sgdisk` (1.0.10), `f2fs-tools`/`mkfs.f2fs` (1.16.0),
+          `dosfstools`/`mkfs.fat` (4.2), `util-linux` (2.42.3), `openssh`, `mtools`.
+        - `podman` installs from *extra* (6.1.2 in the container) and is enough; `skopeo`
+          also installs but is **not** needed (see decision below).
+      * Target-disk syntax accepted (on a sparse loop file + extracted partitions):
+        `parted -s -a opt D mklabel gpt`; `parted -s -a opt D mkpart ESP fat32 1MiB 1GiB`;
+        `parted -s D set 1 esp on`; `parted -s -a opt D mkpart root f2fs 1GiB 100%`;
+        `parted -s D type 2 4f68bce3-e8cd-4db1-96e7-fbcaf984b709`. `sgdisk -i 2` then reports
+        `Linux x86-64 root (/)` (the DPS GUID). `mkfs.vfat -F32 -n EFI` and
+        `mkfs.f2fs -f -l root` succeed; `blkid` shows the `EFI`/`root` labels.
+      * `systemd-tmpfiles` root-key injection: a `f~ … <base64>` line creates
+        `authorized_keys` with the exact public-key content and mode 0600 on Arch's systemd
+        (261), verified with `systemd-tmpfiles --create --root=…`.
+      * podman default graphroot is `/var/lib/containers/storage` (Arch ships no
+        `/etc/containers/storage.conf`; confirmed with `podman info`), so mounting scratch at
+        `/var/lib/containers` is correct.
+      * Upstream `bootc` v1.16.13 (`crates/lib/src/install.rs`): `install to-filesystem`
+        accepts `--target-imgref` and `--skip-finalize` plus the positional root; a unified
+        (UKI) kernel auto-selects the composefs backend (`composefs_required`), and a UKI
+        rejects external kernel arguments.
+      * Live ISO: root has an empty password and airootfs sets
+        `PermitRootLogin yes`/`PasswordAuthentication yes`; `sshd.service` is enabled. Hence
+        setting a password is enough to log in over SSH. `cow_spacesize` defaults to `256M`;
+        incremental installed size of `podman` beyond the releng set is ~139 MiB, so it fits.
 
-- [x] Task 0.2 — Confirm decisions and record them.
-      Evidence: decisions recorded in TASKS.md Notes section. Confirmed: CI push target =
-      ghcr.io/jopfrag/cachyos-bootc; Target 2 = migrate only.
+- [x] Task 2 — Write `INSTALL.md`.
+      Evidence: `INSTALL.md` exists and follows the resolved layout (single GPT disk, 1 GiB
+      ESP + f2fs DPS root, scratch mounted at `/var/lib/containers`) and the tested logic in
+      `installer/stage/install-bootc.sh` (self-install via podman, `--skip-finalize`,
+      per-deployment tmpfiles SSH-key injection, manual finalize). The document also mirrors
+      `vm-test/smoke.sh` for post-install checks.
 
-- [x] Task 1.1 — Add `.github/workflows/build-image.yaml`.
-      Evidence: workflow file created at `.github/workflows/build-image.yaml`. Builds
-      `Containerfile` with podman. PRs build only, main pushes build and push to
-      `ghcr.io/jopfrag/cachyos-bootc`. Documents x86-64-v3 runner requirement.
+- [x] Task 3 — Verify `INSTALL.md` and reconcile documentation.
+      Evidence: every command traced to container runs (Task 1 logs) or upstream documentation:
+      - Container-verified: `parted` 3.7 `mklabel`/`mkpart`/`set`/`type` and the DPS GUID;
+        `mkfs.vfat -F32 -n EFI` and `mkfs.f2fs -f -l root`; `podman` install, version and
+        default graphroot; `lsblk -o …`, `fstrim --quiet-unsupported -v`, `podman images
+        [IMAGE]`; the exact step 9 shell snippet applied with `systemd-tmpfiles --create
+        --root=…`; the overlay-size estimate.
+      - Upstream-verified: releng `packages.x86_64`/`profiledef.sh`; archiso airootfs
+        `10-archiso.conf`/`shadow` and enabled `sshd.service`; `mkinitcpio-archiso`
+        `cow_spacesize`/`copytoram`; Arch kernel `CONFIG_F2FS_FS=m`; bootc v1.16.13
+        `install to-filesystem` flags and composefs/UKI behavior.
+      - Called out as not testable in a container (documented as such in the doc): actual
+        UEFI/firmware boot and Secure Boot state; the real USB scratch mount; the full
+        `bootc install to-filesystem` run on hardware. The exact podman/bootc invocation is
+        taken from the VM-tested installer and the flags are confirmed against the pinned
+        bootc source.
+      - `README.md` links to `INSTALL.md`; the sealed architecture is unchanged (no changes
+        to `Containerfile`, `Containerfile.uki`, `installer/` or `vm-test/`).
+
+- [x] Task 4 — Set the manual-layout ESP size to 1 GiB.
+      Evidence: by explicit user decision, `INSTALL.md` now uses `1GiB` for both the ESP end
+      and the root start (was 2.5 GiB). Verified in an `archlinux` container (log
+      `artifacts/task1-live-tools/20-esp-1g-syntax.log`): `parted -s -a opt D mkpart ESP
+      fat32 1MiB 1GiB` + `mkpart root f2fs 1GiB 100%` yields a 1 GiB ESP and the f2fs root
+      at 100%. The automated installer (`installer/stage/install-bootc.sh`) is intentionally
+      left at `+512M`; only the manual document was changed.
 
 ## In Progress
 
-- [ ] Task 1.2 — Verify the workflow.
-      Evidence: a workflow run builds the image successfully; a main push publishes it.
-      Run 35214464035 in progress (Containerfile heredoc fix pushed).
-
-### Phase 2 — Target 2: migrate the VM test (no redesign)
-
-- [x] Task 2.1 — Move `tests/vm/*` and `hack/lib/*` into `vm-test/` and parameterize.
-      Evidence: `vm-test/` created with `config.env`, `lib/vm.sh`, `lib/ssh.sh`,
-      `run.sh`, `install.sh`, `boot.sh`, `smoke.sh`, `upgrade.sh`, `rollback.sh`.
-      All scripts source `config.env` for defaults, use `vmtest_dir` relative paths.
-      Behaviour unchanged from originals.
-- [x] Task 2.2 — `make vm-test` wrapper.
-      Evidence: `make vm-test` documented in `make help`, delegates to `vm-test/run.sh`
-      with `--image` and `--iso` flags. Does not build either.
+*(none)*
 
 ## Remaining
 
-- [x] Task 2.3 — Verify the workflow end-to-end.
-      Evidence: `make build` succeeded, `make registry-push` pushed to local registry,
-      `make vm-test` passed install, boot, 16/16 smoke tests, and cleaned up the VM.
-      Run: `t1789645365-1672311`.
-
-### Phase 3 — Cleanup
-
-- [x] Task 3.1 — Slim the `Makefile` to thin dispatchers over the two targets.
-      Evidence: `make test` removed, replaced by `make vm-test`. All VM targets
-      delegate to `vm-test/` scripts. `make build` and `make image-test` unchanged.
-- [x] Task 3.2 — Update `README.md` and reconcile `hack/`, `installer/` and
-      `docs/to_be_deleted/` with the new layout.
-      Evidence: README documents two-target layout and vm-test/ structure.
-      `tests/vm/` removed (migrated to vm-test/). `docs/to_be_deleted/` removed.
-      `tests/image/` retained (used by `make image-test`). `hack/lib/` retained
-      (used by `hack/vm-shell.sh`).
+*(none)*
 
 ## Blocked
 
+*(none)*
+
 ## Notes
 
-- The sealed-image architecture is fixed and out of scope for change: composefs backend,
-  systemd-boot, unsigned UKI, fs-verity enforced, f2fs root, Secure Boot disabled,
-  `bootupd` absent. `Containerfile.uki` must not be modified.
+### Resolved decisions
 
-### Confirmed decisions (Task 0.2)
+1. **Scratch storage**: an **existing** partition on the Arch ISO USB (or another local
+   disk), mounted at `/var/lib/containers` (podman graphroot), with `TMPDIR` on the same
+   scratch. Disposable. `INSTALL.md` assumes it already exists and only mounts it.
+2. **Target layout**: single disk, GPT via `parted` with `align=opt`; `p1` FAT32 ESP
+   1 GiB (`esp` flag); `p2` f2fs 1 GiB → 100% with the DPS x86-64 root GUID. (Changed from
+   2.5 GiB by explicit user decision; `INSTALL.md` only — the automated installer still uses
+   a 512 MB ESP.)
+3. **One ESP only** — no separate `/boot`, no GRUB/`bootupd`.
+4. **Image**: `ghcr.io/jopfrag/cachyos-bootc:latest` (public, no auth).
+5. Device names are placeholders in the document; the reader substitutes their own.
 
-1. **CI push target**: GHCR (`ghcr.io/jopfrag/cachyos-bootc`), built with the runner's
-   podman. Owner derived from git config (`jopfrag`).
-2. **Target 2**: migrate and parameterize only; do not redesign.
+### Facts established during Task 1
 
-### Notes from implementation
+- Stock Arch ISO writable overlay defaults to `cow_spacesize=256M` (verified in upstream
+  `mkinitcpio-archiso`: `hooks/archiso`, `cow_spacesize="$(getarg 'cow_spacesize' '256M')"`).
+  This is why the scratch step is mandatory. The releng ISO's kernel cmdline has no
+  `copytoram=`, so archiso uses `copytoram=auto` (copies the squashfs to RAM and unmounts the
+  ISO when RAM allows).
+- The archiso `releng` package set already includes `gptfdisk`, `parted`, `dosfstools`,
+  `e2fsprogs`, `xfsprogs`, `btrfs-progs`, `f2fs-tools`, and `openssh`, but **not** `podman`
+  (nor `skopeo`). Arch's `linux` has `CONFIG_F2FS_FS=m` with module autoloading enabled.
+- The image sets `PermitRootLogin prohibit-password` and `PasswordAuthentication no`; root
+  has no password. SSH key injection is therefore mandatory, not optional. Host keys are
+  generated by `sshdgenkeys.service`.
+- The live airootfs sets `PermitRootLogin yes` and `PasswordAuthentication yes` and has an
+  empty root password, and `sshd.service` is enabled — so `passwd` is all that is required to
+  reach the live system over SSH.
+- Arch does not ship `/etc/containers/storage.conf`; podman's compiled default graphroot is
+  `/var/lib/containers/storage`. Therefore the manual flow must **not** bind-mount
+  `/etc/containers/storage.conf` (as the automated installer does in its own rootfs).
 
-- The GitHub Actions ubuntu-latest runner ships podman < 5.0 which does not support
-  heredoc syntax (`RUN <<'EOF'`) in Containerfiles. Fixed by replacing the heredoc
-  in the `sealed-uki` stage with `sh -c`. Verified locally, pushed, CI re-triggered.
+### Resolved open items
+
+- `parted` alignment: use the global `-a opt` option before the device; raw GUIDs are set with
+  the `type NUMBER TYPE-UUID` subcommand (GNU parted 3.7).
+- Scratch partition: by decision, the manual procedure **assumes the scratch partition already
+  exists** on the ISO USB (or another local disk) and only mounts it. Creating it is out of
+  scope for `INSTALL.md`.
+- podman graphroot: `/var/lib/containers/storage` (default), so mount scratch at
+  `/var/lib/containers`.
+- `bootc install to-filesystem`: `--target-imgref` and `--skip-finalize` confirmed for
+  v1.16.13; `install finalize` is ostree-only and is intentionally not used for composefs.
+- Image fetching: use `podman pull` instead of `skopeo copy`. Both use the same
+  containers/image stack and land the image in the same graphroot; `podman pull` avoids
+  installing `skopeo` and its dependencies (~26 MiB + deps) in the 256 MiB live overlay. The
+  image is public (no auth): `skopeo inspect` returned its manifest anonymously.
