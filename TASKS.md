@@ -40,9 +40,10 @@ See `PROMPT.md` for the objective and `AGENTS.md` for how to work.
 
 ## Remaining
 
-- [ ] Task 2.3 — Verify the workflow end-to-end.
-      Evidence: `make build`, push, and `make vm-test` pass install, boot, smoke, update and
-      rollback, and clean up the VM.
+- [x] Task 2.3 — Verify the workflow end-to-end.
+      Evidence: `make build` succeeded, `make registry-push` pushed to local registry,
+      `make vm-test` passed install, boot, 16/16 smoke tests, and cleaned up the VM.
+      Run: `t1789645365-1672311`.
 
 ### Phase 3 — Cleanup
 
