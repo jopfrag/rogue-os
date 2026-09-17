@@ -11,7 +11,7 @@ infrastructure. The host's libvirt is used to run disposable test VMs.
 
 The image under test is a **sealed** CachyOS bootc image (composefs backend + systemd-boot +
 unsigned UKI; fs-verity enforced, Secure Boot disabled). The VM therefore boots via
-systemd-boot/UKI on UEFI firmware, and the root filesystem uses ext4 (fs-verity capable).
+systemd-boot/UKI on UEFI firmware, and the root filesystem uses f2fs (fs-verity capable).
 
 ```
 Fedora 44 host (hostname: WORKSTATION, user: jopfrag)

@@ -28,7 +28,7 @@ The image is a **sealed** bootc image:
 - a **Unified Kernel Image** at `/boot/EFI/Linux/<kver>.efi`; the raw `vmlinuz` and
   `initramfs.img` are removed from the final image (embedded in the UKI);
 - **sealed**: the composefs digest is baked into the UKI kernel command line and enforced at
-  boot via fs-verity (root filesystem must support fs-verity; ext4 is used).
+  boot via fs-verity (root filesystem must support fs-verity; f2fs is used).
 - **Secure Boot disabled**, UKI **unsigned**. Sealing and Secure Boot are independent;
   upstream explicitly supports a sealed UKI without Secure Boot.
 
@@ -129,7 +129,7 @@ Example installer flow (what our `installer/stage/install-bootc.sh` does):
 
 ```
 sgdisk --new=1:0:+512M --typecode=1:ef00 --new=2:0:0 --typecode=2:<DPS-root-guid> /dev/vda
-mkfs.vfat -F32 /dev/vda1 ; mkfs.ext4 /dev/vda2
+mkfs.vfat -F32 /dev/vda1 ; mkfs.f2fs -f -l root /dev/vda2
 mount /dev/vda2 /target ; mount /dev/vda1 /target/boot/efi
 podman run --privileged --pid=host -v /dev:/dev -v /target:/target <image> \
     bootc install to-filesystem --target-imgref <ref> --skip-finalize /target
@@ -182,7 +182,7 @@ is `root-fs-type` (suitable for `mkfs.$type`).
   generates the UKI; the final image carries `/boot/EFI/Linux/<kver>.efi` and no raw
   `vmlinuz`/`initramfs.img` (they are embedded in the UKI).
 - `/usr/lib/bootc/install/00-<osname>.toml` sets the default root fs type
-  (`[install.filesystem.root] type = "ext4"`), merged alphanumerically.
+  (`[install.filesystem.root] type = "f2fs"`), merged alphanumerically.
 - `bootc container lint` validates these invariants and is run as the final build step.
 - Image must be built so `bootc` is present and `bootc container lint` passes.
 
@@ -237,8 +237,9 @@ favour of **`bootcrew/mono`**. Current reference material:
 
 ```
 .
-├── AGENTS.md, MEMORY.md, README.md
+├── AGENTS.md, README.md
 ├── Containerfile          # CachyOS bootc image build (sealed: composefs + UKI + systemd-boot)
+├── Containerfile.md       # explanation of the Containerfile (comments moved here)
 ├── Containerfile.uki      # read-only reference for the UKI/composefs build
 ├── Makefile               # agent/developer entry points (thin wrappers)
 ├── .gitignore
@@ -339,13 +340,17 @@ On boot, `install-bootc.service` runs `installer/stage/install-bootc.sh`, which:
 - reads parameters from the kernel command line and/or an attached FAT volume labelled
   `BOOTCINSTAL` (`install.env`): `BOOTC_INSTALL_{IMGREF,DEVICE,ROOTFS,ACTION,FINALIZE,ROOT_SSH_KEY}`;
 - partitions the target (`sgdisk`, GPT: 512M ESP with `ef00` + root with the **DPS x86-64 root
-  GUID** `4f68bce3-e8cd-4db1-96e7-fbcaf984b709`), creates vfat + ext4, mounts root at
+  GUID** `4f68bce3-e8cd-4db1-96e7-fbcaf984b709`), creates vfat + f2fs, mounts root at
   `/target` and the ESP at `/target/boot/efi`;
 - pulls the image with `skopeo copy` (TLS disabled for the local registry) into
-  containers-storage (overlay driver with `fuse-overlayfs`), then runs a **self-install**
+  containers-storage, then runs a **self-install**
   `bootc install to-filesystem --target-imgref <ref> --skip-finalize /target` from inside the
   image via `podman run --privileged --pid=host -v /dev:/dev -v <target>:/target`. bootc finds
-  the UKI in its own rootfs and auto-selects the **composefs backend + systemd-boot**;
+  the UKI in its own rootfs and auto-selects the **composefs backend + systemd-boot**. The
+  installer's containers-storage uses the overlay driver with `fuse-overlayfs`: the live
+  installer root is itself overlayfs, so the kernel overlay driver cannot stack on it. A `vfs`
+  storage driver was tried first, but it expands the ~3.4 GiB image to ~5 GiB and exhausts the
+  live writable space;
 - (no `--karg`: rejected for a UKI) performs its own finalization (`fstrim`, `remount,ro`)
   because bootc's built-in finalize (`fsfreeze`) hangs on the bind-mounted target;
 - optionally injects a root SSH key (write a tmpfiles drop-in to the target) and then
