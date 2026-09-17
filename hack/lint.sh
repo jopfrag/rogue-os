@@ -6,7 +6,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 fail=0
 
-mapfile -t scripts < <(find "${repo_root}/hack" "${repo_root}/tests" -type f -name '*.sh' | sort)
+mapfile -t scripts < <(find "${repo_root}/hack" "${repo_root}/tests" "${repo_root}/vm-test" -type f -name '*.sh' | sort)
 
 echo "==> bash -n"
 for f in "${scripts[@]}"; do
