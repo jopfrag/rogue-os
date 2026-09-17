@@ -95,8 +95,9 @@ commit; it must be re-checked when `BOOTC_VERSION`/`BOOTC_COMMIT` are bumped. Se
 f2fs investigation and end-to-end verification results in this document's "Default root
 filesystem" section below.
 
-`make bin` builds the binary, `make install` installs the systemd units, dracut module, and
-baseimage reference content into `/output`, which later stages copy from.
+bootc's upstream `make bin` builds the binary and `make install` installs the systemd
+units, dracut module, and baseimage reference content into `/output`, which later stages
+copy from.
 
 ## Stage 2 — rootfs
 
@@ -113,10 +114,11 @@ Beyond the base system, the packages are:
   data).
 - Filesystem tools: `e2fsprogs`, `xfsprogs`, `btrfs-progs`, `f2fs-tools`, `dosfstools`.
 - `systemd-ukify` — builds the UKI (pulls in `binutils`, `python-pefile`, …).
-- `skopeo` + `podman` — image transport and pulling.
+- `skopeo` + `podman` + `fuse-overlayfs` — image transport/pulling and the rootless overlay
+  store.
 - `systemd` (from `base`) also ships systemd-boot (`bootctl` + `systemd-bootx64.efi`), so no
   separate systemd-boot package is required. **`bootupd` is deliberately not installed.**
-- `dbus`, `shadow`, `openssh` — userspace.
+- `dbus` + `dbus-glib` + `glib2`, `shadow`, `openssh` — userspace.
 - `bubblewrap` — required in the image by `bcvk`, the rootless test tool: `bcvk` re-execs
   itself through a bubblewrap namespace inside a container created from this image, and
   refuses to run if `bwrap` is absent.
@@ -148,7 +150,9 @@ module, and baseimage reference content built in stage 1.
 `bootc install` and for external installers that consult
 `bootc install print-configuration`. The composefs backend enforces fs-verity on a sealed
 UKI, so the root filesystem must support it. **f2fs** is used (not ext4): it supports
-fs-verity, and the sealed install on f2fs is verified end-to-end.
+fs-verity, and the sealed install on f2fs is verified via the manual
+`bootc install to-filesystem` flow (see `INSTALL.md`). The rootless `bcvk to-disk` path has
+a known intermittent finalize issue.
 Because f2fs is a loadable module, it is forced into the initramfs via the dracut
 `add_drivers` line below.
 
@@ -215,9 +219,8 @@ default root filesystem and, unlike ext4 (built-in), it is a module; without it 
 initramfs cannot mount `/sysroot` and boot drops to emergency mode.
 
 There must be exactly one kernel: `bootc container split-kernel-and-rootfs`/`ukify` assume a
-single kernel, and `head -n1` would otherwise silently pick an arbitrary one and produce a
-UKI that does not match the loaded modules. The build **fails loudly** if there is not
-exactly one kernel directory.
+single kernel, and picking an arbitrary one would produce a UKI that does not match the
+loaded modules. The build **fails loudly** if there is not exactly one kernel directory.
 
 ### Base root filesystem layout
 

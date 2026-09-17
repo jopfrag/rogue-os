@@ -11,13 +11,12 @@ Unified Kernel Image and enforced via fs-verity. **Secure Boot is not used** and
 This repository contains the implementation of the image build itself; it does **not** wrap
 a prebuilt CachyOS bootc image, and it does **not** use `bootc-image-builder`.
 
-- [`TEST.md`](TEST.md) — testing the image with bcvk (`ephemeral` and `libvirt run`).
 - [`INSTALL.md`](INSTALL.md) — by-hand install from a stock Arch Linux ISO.
 
 ## Prerequisites
 
 - A Linux host with KVM, QEMU and libvirt reachable from the development environment.
-- `podman`, `bcvk`, `qemu-img`, `virtiofsd`, `git`, `curl`, `ssh`.
+- `podman`, `bcvk`, `qemu-img`, `virtiofsd`, `just`, `git`, `curl`, `ssh`.
 
 ## Task runner
 
@@ -41,7 +40,7 @@ podman build -t localhost:5000/cachyos-bootc:test -f Containerfile .
 podman build --build-arg IMAGE_VERSION=1 -t localhost:5000/cachyos-bootc:v1 -f Containerfile .
 podman build --build-arg IMAGE_VERSION=2 -t localhost:5000/cachyos-bootc:v2 -f Containerfile .
 
-# Test (details in TEST.md)
+# Test with bcvk
 bcvk ephemeral run-ssh localhost:5000/cachyos-bootc:test -- bootc status
 
 bcvk libvirt -c qemu:///session run \
@@ -63,8 +62,8 @@ podman push --tls-verify=false 192.168.122.1:5000/cachyos-bootc:test
 Containerfile        CachyOS bootc image build
 Containerfile.md     Explanation of the Containerfile
 bootc-f2fs.patch     Local bootc patch (f2fs support)
+AGENTS.md            Instructions for the coding agent
 Justfile             Task runner for the bcvk workflow
-TEST.md              Testing with bcvk
 INSTALL.md           Manual install from a stock Arch ISO
 ```
 

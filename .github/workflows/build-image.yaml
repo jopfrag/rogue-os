@@ -1,7 +1,7 @@
 # Build the CachyOS bootc OCI image from Containerfile.
 #
-# Pull requests: build only (verify the image builds).
-# Push to main: build and push to GHCR.
+# Pull requests (main, develop): build only (verify the image builds).
+# Push to main: build and push to GHCR. Push to develop: build only.
 #
 # Runner requirement: x86-64-v3 (AVX2). CachyOS v3 images require this.
 # GitHub's ubuntu-latest runners are x86-64-v3.
@@ -10,9 +10,9 @@ name: Build bootc image
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, develop]
   push:
-    branches: [main]
+    branches: [main, develop]
 
 env:
   IMAGE_NAME: ghcr.io/jopfrag/cachyos-bootc

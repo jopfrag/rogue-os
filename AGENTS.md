@@ -278,7 +278,7 @@ dmesg;
 
 SSH diagnostics;
 
-installer logs.
+bootc install logs.
 
 Preserve failure artifacts where useful.
 
