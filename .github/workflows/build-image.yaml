@@ -1,0 +1,55 @@
+# Build the CachyOS bootc OCI image from Containerfile.
+#
+# Pull requests: build only (verify the image builds).
+# Push to main: build and push to GHCR.
+#
+# Runner requirement: x86-64-v3 (AVX2). CachyOS v3 images require this.
+# GitHub's ubuntu-latest runners are x86-64-v3.
+
+name: Build bootc image
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+env:
+  IMAGE_NAME: ghcr.io/jopfrag/cachyos-bootc
+  IMAGE_TAG: ${{ github.sha }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman
+
+      - name: Build image
+        run: |
+          podman build \
+            --tag "${IMAGE_NAME}:${IMAGE_TAG}" \
+            --tag "${IMAGE_NAME}:latest" \
+            -f Containerfile .
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io \
+            --username "${{ github.actor }}" \
+            --password-stdin
+
+      - name: Push image
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          podman push "${IMAGE_NAME}:${IMAGE_TAG}"
+          podman push "${IMAGE_NAME}:latest"
