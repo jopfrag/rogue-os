@@ -1,8 +1,8 @@
 ARG BOOTC_VERSION=v1.16.13
 ARG BOOTC_COMMIT=fa0d3f9cb9a0ce3b4d1dc2607a0bf5e31b822f60
 ARG CACHYOS_MIRROR=""
-ARG KERNEL_PKGS="linux-cachyos"
-ARG FIRMWARE_PKGS="linux-firmware-amdgpu linux-firmware-intel amd-ucode"
+ARG KERNEL_PKGS="linux-cachyos-server-lto"
+ARG FIRMWARE_PKGS="linux-firmware amd-ucode"
 
 FROM docker.io/cachyos/cachyos-v3:latest AS bootc-builder
 
@@ -52,6 +52,10 @@ RUN sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf \
          for m in ${CACHYOS_MIRROR}; do printf 'Server = %s\n' "$m" >> /etc/pacman.d/cachyos-mirrorlist; done; \
        fi
 
+# The CachyOS base image ships base-devel, i.e. gcc/make/autoconf/... and their
+# toolchain dependencies. A sealed server image never compiles anything, so drop
+# it. sudo and diffutils are not build tools but are only pulled in as
+# base-devel dependencies, so they are re-installed explicitly.
 RUN pacman -Syu --noconfirm --needed \
         base \
         ${KERNEL_PKGS} \
@@ -65,7 +69,11 @@ RUN pacman -Syu --noconfirm --needed \
         openssh \
         bubblewrap \
         efibootmgr \
-        cachyos-rate-mirrors \
+        nftables \
+        smartmontools sysstat lm_sensors irqbalance \
+        jq \
+    && pacman -Rns --noconfirm base-devel \
+    && pacman -S --noconfirm --needed sudo diffutils \
     && pacman -Scc --noconfirm
 
 RUN install -d /usr/lib/sysimage/pacman \
@@ -83,41 +91,30 @@ RUN install -d /usr/lib/sysimage/pacman \
 
 COPY --from=bootc-builder /output /
 
-RUN install -d /usr/lib/bootc/install \
-    && printf '[install.filesystem.root]\ntype = "f2fs"\n' \
-        > /usr/lib/bootc/install/00-cachyos.toml
-
-RUN install -d /usr/lib/bootc/kargs.d \
-    && printf 'kargs = ["console=tty0", "console=ttyS0", "rw"]\n' \
-        > /usr/lib/bootc/kargs.d/00-console.toml
+# Static image files: systemd units and drop-ins, tmpfiles, sysctl/ssh/network
+# config, dracut/kargs/composefs config, and the auto-reboot helper. These live
+# under root/ in the build context and are copied into the rootfs verbatim.
+COPY root /
 
 RUN systemctl enable systemd-networkd systemd-resolved systemd-timesyncd sshd \
         systemd-boot-update.service \
-        cachyos-rate-mirrors.timer \
+        bootc-fetch-apply-updates.timer \
+        bootc-auto-reboot.timer \
+        fstrim.timer \
+        nftables.service \
+        smartd.service \
+        sysstat.service \
+        irqbalance.service \
+    && systemctl set-default multi-user.target \
     && systemctl mask systemd-firstboot.service
 
 RUN echo "uninitialized" > /etc/machine-id \
     && ln -sf /usr/share/zoneinfo/UTC /etc/localtime
 
-RUN install -d /etc/ssh/sshd_config.d \
-    && printf 'PermitRootLogin prohibit-password\nPasswordAuthentication no\n' \
-        > /etc/ssh/sshd_config.d/10-bootc.conf \
-    && rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub \
+RUN rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub \
     && systemctl enable sshdgenkeys.service
 
-RUN printf '[Match]\nType=ether\n\n[Network]\nDHCP=yes\n' \
-        > /usr/lib/systemd/network/20-wired.network
-
-RUN printf 'L! /etc/resolv.conf - - - - /run/systemd/resolve/stub-resolv.conf\n' \
-        > /usr/lib/tmpfiles.d/resolv-conf.conf
-
-RUN install -d /usr/lib/composefs \
-    && printf '[etc]\nmount = "bind"\n\n[var]\nmount = "bind"\n' \
-        > /usr/lib/composefs/setup-root-conf.toml
-
-RUN printf 'hostonly=no\ncompress=zstd\nadd_dracutmodules+=" ostree bootc "\nadd_drivers+=" f2fs "\n' \
-        > /usr/lib/dracut/dracut.conf.d/10-bootc.conf \
-    && test "$(find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 1 \
+RUN test "$(find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 1 \
     && kver="$(ls /usr/lib/modules)" \
     && dracut --force "/usr/lib/modules/${kver}/initramfs.img" "${kver}"
 
@@ -129,41 +126,9 @@ RUN rm -rf /boot /home /root /usr/local /srv /opt /mnt \
     && ln -sT var/opt /opt \
     && ln -sT var/mnt /mnt \
     && ln -sT var/home /home \
-    && ln -sT ../var/usrlocal /usr/local \
-    && printf 'd /var/opt 0755 root root -\nd /var/home 0755 root root -\nd /var/srv 0755 root root -\nd /var/mnt 0755 root root -\nd /var/usrlocal 0755 root root -\nd /var/roothome 0700 root root -\nd /run/media 0755 root root -\n' \
-        > /usr/lib/tmpfiles.d/bootc-base-dirs.conf \
-    && printf '[composefs]\nenabled = yes\n' \
-        > /usr/lib/ostree/prepare-root.conf
+    && ln -sT ../var/usrlocal /usr/local
 
-RUN printf '%s\n' \
-        'd /var/cache 0755 root root -' \
-        'd /var/cache/ldconfig 0700 root root -' \
-        'd /var/cache/pacman 0755 root root -' \
-        'd /var/cache/pacman/pkg 0755 root root -' \
-        'd /var/db 0755 root root -' \
-        'd /var/db/sudo 0711 root root -' \
-        'd /var/db/sudo/lectured 0700 root root -' \
-        'd /var/empty 0755 root root -' \
-        'd /var/games 0775 root games -' \
-        'd /var/lib 0755 root root -' \
-        'd /var/lib/containers 0755 root root -' \
-        'd /var/lib/containers/sigstore 0755 root root -' \
-        'd /var/lib/krb5kdc 0755 root root -' \
-        'd /var/lib/misc 0755 root root -' \
-        'd /var/lib/systemd/catalog 0755 root root -' \
-        'd /var/lib/tpm2-tss 0755 root root -' \
-        'd /var/lib/tpm2-tss/system 0755 root root -' \
-        'd /var/lib/xfsprogs 0755 root root -' \
-        'd /var/local 0755 root root -' \
-        'd /var/log 0755 root root -' \
-        'd /var/log/old 0755 root root -' \
-        'd /var/spool 0755 root root -' \
-        'd /var/spool/mail 0755 root root -' \
-        'd /var/tmp 1777 root root -' \
-        'L /var/lock - - - - ../run/lock' \
-        'L /var/mail - - - - spool/mail' \
-        > /usr/lib/tmpfiles.d/bootc-cachyos-var.conf \
-    && pacman -Scc --noconfirm >/dev/null \
+RUN pacman -Scc --noconfirm >/dev/null \
     && rm -rf /usr/lib/sysimage/log/* \
     && rm -rf /usr/lib/sysimage/cache/pacman/pkg/* \
     && rm -f /var/cache/ldconfig/aux-cache \

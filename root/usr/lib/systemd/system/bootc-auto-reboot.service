@@ -1,0 +1,10 @@
+[Unit]
+Description=Reboot into a staged bootc deployment
+Documentation=man:bootc(8)
+# Native composefs boots do not write /run/ostree-booted.
+ConditionKernelCommandLine=composefs
+After=bootc-fetch-apply-updates.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/bootc-auto-reboot

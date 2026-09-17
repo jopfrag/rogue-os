@@ -1,0 +1,12 @@
+#!/bin/bash
+set -euo pipefail
+
+status="$(bootc status --json)"
+if ! jq -e '(.status.staged != null) and (.status.staged.downloadOnly != true)' \
+        >/dev/null <<<"${status}"; then
+    logger -t bootc-auto-reboot "no applicable staged deployment; not rebooting"
+    exit 0
+fi
+
+logger -t bootc-auto-reboot "staged deployment present; rebooting to apply it"
+systemctl reboot

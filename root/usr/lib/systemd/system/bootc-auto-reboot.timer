@@ -1,0 +1,11 @@
+[Unit]
+Description=Weekly reboot into a staged bootc deployment
+Documentation=man:bootc(8)
+
+[Timer]
+OnCalendar=Sun *-*-* 03:00:00
+RandomizedDelaySec=1h
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

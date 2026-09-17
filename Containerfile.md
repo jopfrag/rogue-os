@@ -42,10 +42,12 @@ References: the upstream bootc image requirements (`bootc-dev/bootc`,
   `Server = ` URLs to pin a specific mirror, e.g. to work around a transient mismatch
   (upstream mirror flakiness is recurring). Each entry may use the pacman `$arch`/`$repo`
   placeholders.
-- `KERNEL_PKGS` — kernel package(s); defaults to `linux-cachyos` (the CachyOS BORE kernel).
-- `FIRMWARE_PKGS` — firmware packages. The default is a trimmed set for this development
-  laptop (AMD 5500U "Green Sardine" iGPU + Intel AX200). Override with `--build-arg` to
-  build a portable image (e.g. `FIRMWARE_PKGS="linux-firmware"`).
+- `KERNEL_PKGS` — kernel package(s); defaults to `linux-cachyos-server-lto` (the CachyOS
+  server kernel, Clang ThinLTO build: stock EEVDF, 300 Hz, lazy preemption, no BORE/Cachy
+  sauce).
+- `FIRMWARE_PKGS` — firmware packages. The default is `linux-firmware amd-ucode`: the full
+  firmware set (so the image is not tied to one machine's GPU/NIC) plus AMD CPU microcode.
+  Override with `--build-arg` (e.g. `intel-ucode`) for a different CPU vendor.
 
 ## Stage 1 — bootc-builder
 
@@ -107,7 +109,7 @@ The actual root filesystem of the image.
 
 Beyond the base system, the packages are:
 
-- `${KERNEL_PKGS}` — the kernel (default `linux-cachyos`).
+- `${KERNEL_PKGS}` — the kernel (default `linux-cachyos-server-lto`).
 - `${FIRMWARE_PKGS}` — firmware (see the build argument above).
 - `dracut` + `cpio` — initramfs generation.
 - `ostree` + `libselinux` — bootc dependencies (`ostree` also provides the bootc backend
@@ -123,7 +125,26 @@ Beyond the base system, the packages are:
   itself through a bubblewrap namespace inside a container created from this image, and
   refuses to run if `bwrap` is absent.
 - `efibootmgr` — used by `bootctl` to manage EFI boot variables during install.
-- `cachyos-rate-mirrors` — keeps the installed system's mirrorlist fast and working.
+- `nftables` — firewall. `nftables.service` is enabled with the package's default
+  `/etc/nftables.conf` (`drop` policy; allows loopback, established/related, ICMP, SSH).
+- `smartmontools` + `sysstat` + `lm_sensors` — health telemetry for a headless server. The
+  `smartd` and `sysstat` services are enabled (sysstat pulls in its collect/summary/rotate
+  timers); `lm_sensors` is installed but its service is left off because it needs a
+  machine-specific `sensors-detect` run.
+- `irqbalance` — spreads IRQs on multi-core hosts (`irqbalance.service`).
+- `jq` — used by the staged-update auto-reboot helper (see "Unattended updates").
+
+`cachyos-rate-mirrors` is deliberately **not** installed: it is a desktop feature that
+re-ranks and rewrites the pacman mirrorlists, which a sealed bootc server does not use for
+updates (bootc pulls OCI images).
+
+The CachyOS base image also ships `base-devel` (the full compiler/toolchain metapackage).
+A sealed server image never compiles anything, so it is removed with
+`pacman -Rns base-devel`. pacman keeps the toolchain dependencies that other installed
+packages still need (`pkgconf` for `dracut`, `binutils` for `systemd-ukify`, `which` for
+`ostree`). `sudo` and `diffutils` are not build tools but are only pulled in as
+`base-devel` dependencies, so they are re-installed explicitly rather than silently
+dropped.
 
 ### Relocating pacman state
 
@@ -143,6 +164,24 @@ requires; any populated directory is re-created empty under `/usr/lib/sysimage`.
 
 `COPY --from=bootc-builder /output /` installs the bootc binary, systemd units, dracut
 module, and baseimage reference content built in stage 1.
+
+### Static files (`root/`)
+
+Every static file the image adds is stored under `root/` in the build context, mirroring its
+absolute path (e.g. `root/usr/lib/systemd/network/20-wired.network` →
+`/usr/lib/systemd/network/20-wired.network`), and installed with a single `COPY root /`.
+This keeps the `Containerfile` to commands instead of heredocs/`printf` and makes the
+configuration reviewable as ordinary files. `COPY` preserves file modes, which matters for
+the executable `/usr/libexec/bootc-auto-reboot` (mode `0755`, tracked by git).
+
+The tree provides: the bootc install filesystem config and kargs, the auto-reboot
+helper/service/timer, the composefs drop-ins for the upstream update units, the
+headless-server sysctl, the SSH hardening drop-in, the networkd config, the `resolv.conf`
+and `/var` tmpfiles, the composefs `setup-root-conf.toml`, the dracut config, and
+`prepare-root.conf`.
+
+Only genuinely dynamic content stays in `RUN`: `/etc/machine-id`, the `/etc/localtime`
+symlink, the bootc image-version marker, and the base-filesystem relayout/symlinks.
 
 ### Default root filesystem
 
@@ -173,14 +212,62 @@ bakes into the UKI:
 - `systemd-boot-update.service` — copies the current `systemd-bootx64.efi` onto the ESP on
   each boot, keeping the boot *loader* in sync with the image across updates (bootc only
   manages the UKI, not the loader binary).
-- `cachyos-rate-mirrors.timer` — periodically re-ranks mirrors so the installed system keeps
-  a fast, working mirrorlist without manual intervention.
+- `bootc-fetch-apply-updates.timer` + `bootc-auto-reboot.timer` — unattended updates and
+  maintenance-window reboots (see "Unattended updates and reboots").
+- `fstrim.timer` — periodic TRIM for the f2fs root.
+- `nftables.service` — the firewall described above.
+- `smartd.service`, `sysstat.service`, `irqbalance.service` — telemetry and IRQ balancing.
 - `systemd-firstboot.service` is **masked** to avoid first-boot interactive prompts.
+
+The default target is set to `multi-user.target` (`systemctl set-default`); no graphical
+stack is installed.
 
 ### Machine identity
 
 `/etc/machine-id` is set to `uninitialized` (generated on first boot) and the timezone is set
 to UTC so nothing prompts.
+
+### Headless server defaults
+
+The image targets unattended servers, not a desktop:
+
+- The default target is `multi-user.target`; there is no graphical stack.
+- `/usr/lib/sysctl.d/90-headless-server.conf` sets `kernel.panic = 10` and
+  `kernel.panic_on_oops = 1`, so a crashed kernel reboots instead of hanging until someone
+  reaches the machine. systemd-boot has no boot-count fallback for UKIs, so a kernel that
+  oopses on every boot would loop; drop `kernel.panic_on_oops` if that trade-off is not
+  wanted.
+- `nftables.service` is enabled with the package's default `/etc/nftables.conf`: input
+  policy `drop`, allowing loopback, established/related, ICMP and SSH.
+- SMART (`smartd.service`) and system activity (`sysstat.service`) monitoring are enabled.
+  `lm_sensors` is installed, but its service is not enabled because it requires a
+  machine-specific `sensors-detect` run first.
+- `irqbalance.service` and `fstrim.timer` are enabled.
+
+### Unattended updates and reboots
+
+bootc separates *staging* an update from *applying* it:
+
+- `bootc-fetch-apply-updates.timer` (upstream unit: `bootc upgrade --apply --quiet`, first
+  run `OnBootSec=1h`, then every eight hours with a two-hour randomized delay) stages OS
+  updates but never reboots.
+- The upstream update service/timer are gated on `ConditionPathExists=/run/ostree-booted`,
+  but upstream documents that **native composefs boots do not write that marker** (only the
+  ostree backend does). This image boots via composefs, so vendor drop-ins
+  (`/usr/lib/systemd/system/bootc-fetch-apply-updates.{timer,service}.d/10-composefs.conf`)
+  reset `ConditionPathExists=` to let the timer run. `bootc upgrade` itself detects the
+  composefs environment, so no marker is required at runtime.
+- `bootc-auto-reboot.timer` (Sunday 03:00, `RandomizedDelaySec=1h`, not `Persistent`)
+  starts `bootc-auto-reboot.service` (gated on `ConditionKernelCommandLine=composefs`),
+  which runs `/usr/libexec/bootc-auto-reboot`. That helper reads `bootc status --json` and
+  reboots **only** when a deployment is staged and is not `downloadOnly`, logging its
+  decision via `logger`. `jq` is installed in the image for that check.
+- Because the timer is not `Persistent`, a missed maintenance window does not force an
+  immediate reboot on the next boot.
+
+In development the tracked image is the local `localhost/rogue:latest`, which is not
+pullable from inside a test VM; there the update service will fail its pull and can be
+ignored. Production images track a registry reference such as `ghcr.io/jopfrag/rogue`.
 
 ### SSH
 
