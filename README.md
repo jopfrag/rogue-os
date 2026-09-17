@@ -1,10 +1,7 @@
 # CachyOS bootc
 
 Build a **sealed CachyOS bootc OCI image** (composefs backend, systemd-boot, unsigned UKI)
-from scratch, and test it end-to-end in a disposable libvirt/QEMU/KVM virtual machine: build
-the image, push it to a local OCI registry, boot a CachyOS installer environment, install with
-`bootc install to-filesystem`, reboot, connect over SSH, and run automated integration tests
-(including update and rollback), then destroy everything.
+from scratch, and test it end-to-end in a disposable libvirt/QEMU/KVM virtual machine.
 
 The image is **sealed**: the composefs digest of the root filesystem is embedded in the
 Unified Kernel Image and enforced via fs-verity. **Secure Boot is not used** and the UKI is
@@ -13,41 +10,45 @@ Unified Kernel Image and enforced via fs-verity. **Secure Boot is not used** and
 This repository contains the implementation of the image build itself; it does **not** wrap a
 prebuilt CachyOS bootc image, and it does **not** use `bootc-image-builder`.
 
-## Status
+## Two targets
 
-The full workflow works end-to-end: the sealed image builds, installs into a disposable VM
-via the custom installer ISO (`bootc install to-filesystem`, composefs backend + systemd-boot),
-boots from disk, is reachable over SSH, and passes the automated smoke, update and rollback
-tests. See `Containerfile.md` for the image build rationale and documentation.
+This repository exposes two independent targets that share only `Containerfile`:
 
-> SSH is key-only: the harness injects an ephemeral public key at install time (a tmpfiles
-> drop-in placed in the composefs deployment's per-deployment `/etc`), so no password is baked
-> into the image and password auth is disabled (`PasswordAuthentication no`).
+1. **CI image build** — a GitHub Actions workflow (`.github/workflows/build-image.yaml`)
+   that builds the OCI image. PRs build only; main pushes build and push to GHCR.
+2. **VM test** — a `make vm-test` workflow that installs the image into a disposable
+   libvirt/QEMU/KVM VM and runs automated tests (install, boot, smoke, update, rollback).
+   Consumes an image reference and installer ISO; builds neither.
 
 ## Prerequisites
 
 - A Linux host with KVM, QEMU and libvirt, reachable from the development environment.
-- `podman`, `virsh`, `virt-install`, `qemu-img`, `xorriso`, `git`, `make`, `curl`, `ssh`.
+- `podman`, `virsh`, `qemu-img`, `xorriso`, `git`, `make`, `curl`, `ssh`.
 - The host firewall must permit traffic from the libvirt bridge to the registry.
 
 ## Usage
 
 ```sh
-make build       # build the CachyOS bootc OCI image
-make lint        # bootc container lint + shellcheck/format checks
-make image-test  # fast image-level checks (no VM)
-make installer   # build the CachyOS installer live ISO
-make registry-push   # build, start the local registry, and push the image
+# Image build (Target 1)
+make build          # build the CachyOS bootc OCI image
+make lint           # bootc container lint + shellcheck checks
+make image-test     # fast image-level checks (no VM)
 
-# Full disposable-VM workflows (install -> boot -> verify; clean up afterwards):
-make test        # install -> boot -> smoke test
-make vm-install  # install into a VM and keep it for inspection
-make vm-update   # install v1 -> boot -> update to v2 -> verify
-make vm-rollback # install v1 -> update to v2 -> roll back to v1 -> verify
+# Installer / registry (supporting tools)
+make installer      # build the CachyOS installer live ISO
+make registry-push  # start registry and push the image
 
-make image-v1    # build a v1 image (for update/rollback tests)
-make image-v2    # build a v2 image (for update/rollback tests)
-make clean       # remove local build and test artifacts
+# VM test (Target 2) — consumes image + ISO, builds neither
+make vm-test        # install -> boot -> smoke test
+make vm-install     # install into a VM and keep it for inspection
+make vm-update      # install v1 -> boot -> update to v2 -> verify
+make vm-rollback    # install v1 -> update to v2 -> roll back to v1 -> verify
+
+# Versioned images for update/rollback tests
+make image-v1       # build a v1 image
+make image-v2       # build a v2 image
+
+make clean          # remove local build and test artifacts
 ```
 
 Commands are safe to run repeatedly. Use `RUN_ARGS=--keep` to keep the test VM, or
@@ -56,15 +57,25 @@ Commands are safe to run repeatedly. Use `RUN_ARGS=--keep` to keep the test VM, 
 ## Layout
 
 ```
-Containerfile        CachyOS bootc image build (sealed: composefs + UKI + systemd-boot)
-Containerfile.md     explanation of the Containerfile (the comments live here)
-Containerfile.uki    read-only reference for the UKI/composefs build (do not modify)
-Makefile             agent/developer entry points
-installer/           installer environment build + installation logic
+.github/workflows/   CI image build workflow (Target 1)
+vm-test/             Disposable VM test workflow (Target 2)
+  config.env           Registry/image/ISO defaults
+  run.sh               End-to-end: install -> boot -> smoke
+  install.sh           Boot installer, install to disk
+  boot.sh              Boot installed system, wait for SSH
+  smoke.sh             Verify sealed deployment, bootc, systemd
+  upgrade.sh           v1 -> v2 update test
+  rollback.sh          Rollback after update test
+  lib/vm.sh            Libvirt/QEMU/KVM helpers
+  lib/ssh.sh           SSH helpers for test VMs
+Containerfile        CachyOS bootc image build (shared by both targets)
+Containerfile.md     Explanation of the Containerfile
+Containerfile.uki    Read-only reference for the UKI/composefs build (do not modify)
+Makefile             Thin dispatchers for both targets
+installer/           Installer environment build + installation logic
 tests/image/         VM-less image validation
-tests/vm/            disposable-VM integration tests (install, boot, smoke, update, rollback)
-hack/                helper scripts (registry, VM lifecycle, SSH, diagnostics)
-contrib/             third-party reference material and attribution
+hack/                Helper scripts (registry, build, lint, shell)
+contrib/             Third-party reference material and attribution
 ```
 
 ## License and attribution
