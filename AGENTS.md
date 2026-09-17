@@ -56,9 +56,7 @@ Do not implement multiple unrelated tasks simultaneously.
 
 Before starting work:
 
-Read TASKS.md.
-
-Identify the current task.
+Identify the task from the request and the project documentation.
 
 Read the relevant source code and documentation.
 
@@ -74,58 +72,21 @@ Fix failures related to the current task.
 
 Record important discoveries.
 
-Mark the task complete in TASKS.md.
-
 Select the next task.
 
 Never mark a task complete without verification.
 
-3. Maintain TASKS.md
+3. Task Tracking
 
-TASKS.md is the source of truth for project progress.
-
-Maintain these sections:
-
-# Tasks
-
-## Completed
-
-## In Progress
-
-## Remaining
-
-## Blocked
-
-## Notes
-
-
-Only one task may be in In Progress.
-
-When starting a task:
-
-## In Progress
-
-- [ ] Task N — description
-
-
-When completing it, move it to:
-
-## Completed
-
-- [x] Task N — description
-
-
-Then select the next task.
-
-If work reveals a new task, add it to Remaining.
-
-Do not silently expand scope.
+There is no task file. Keep the current task and the remaining work clear in the
+conversation, work on one task at a time, and do not silently expand scope. If work reveals
+a new task, note it and continue with the current task.
 
 4. Stay Focused
 
 Do not lose focus on the current task.
 
-If you discover an unrelated improvement, record it in TASKS.md and continue with the current task.
+If you discover an unrelated improvement, note it and continue with the current task.
 
 Examples:
 
@@ -189,9 +150,8 @@ Do not spend excessive time researching when a small experiment can answer the q
 
 When behavior is uncertain, create a minimal experiment.
 
-Document important architectural discoveries in:
-
-docs/design.md
+Document important architectural discoveries in the relevant project documentation
+(README.md / Containerfile.md).
 
 7. Preserve the Intended Architecture
 
@@ -209,7 +169,7 @@ determine whether there is a compatible alternative.
 
 Do not silently change the architecture.
 
-The intended architecture for this project is fixed and recorded in docs/design.md. In particular:
+The intended architecture for this project is fixed and recorded in Containerfile.md. In particular:
 
 - the CachyOS bootc image uses the composefs backend;
 - it boots via systemd-boot with a Unified Kernel Image (UKI);
@@ -217,7 +177,7 @@ The intended architecture for this project is fixed and recorded in docs/design.
 - Secure Boot is out of scope / disabled, and the UKI is unsigned;
 - bootupd must not be present in the image (its presence would select the GRUB/bootupd path instead of systemd-boot).
 
-Changing any of these requires the same investigate -> verify -> record process, and an explicit update to docs/design.md. Do not change them silently.
+Changing any of these requires the same investigate -> verify -> record process, and an explicit update to Containerfile.md. Do not change them silently.
 
 8. Keep Changes Small
 
@@ -361,14 +321,7 @@ Never use broad cleanup commands that could destroy unrelated user VMs.
 
 Keep documentation synchronized with the implementation.
 
-Use:
-
-README.md
-docs/design.md
-docs/development.md
-
-
-where appropriate.
+Use `README.md` and `Containerfile.md` where appropriate.
 
 Do not document functionality that does not exist.
 
@@ -404,7 +357,7 @@ understand the code rather than blindly copying it;
 
 adapt it to the current project rather than introducing unnecessary dependencies.
 
-The primary reference for the image build is the bootcrew/mono repository (arch/Containerfile and shared/), the maintained successor to bootcrew/arch-bootc (the repository named as bootc-crew/arch-bootc in older notes no longer exists). Containerfile.uki in this repository is a read-only reference for the composefs + UKI + systemd-boot build and must not be modified; implementation lives in Containerfile.
+The primary reference for the image build is the bootcrew/mono repository (arch/Containerfile and shared/), the maintained successor to bootcrew/arch-bootc. Implementation lives in Containerfile.
 
 18. Current Task Discipline
 
@@ -416,7 +369,7 @@ and:
 
 What evidence will allow me to mark this task complete?
 
-If either answer is unclear, stop implementation and clarify the task through TASKS.md and the project documentation.
+If either answer is unclear, stop implementation and clarify the task through the project documentation.
 
 19. Definition of Done
 
@@ -430,7 +383,7 @@ failures have been resolved or explicitly documented as blockers;
 
 the result matches the intended architecture;
 
-TASKS.md has been updated.
+the documentation is synchronized.
 
 Do not use "probably works" as completion criteria.
 

@@ -1,8 +1,8 @@
 diff --git i/crates/lib/src/install/baseline.rs w/crates/lib/src/install/baseline.rs
-index 0db968b..bd5853b 100644
+index 0db968b..4bd60a8 100644
 --- i/crates/lib/src/install/baseline.rs
 +++ w/crates/lib/src/install/baseline.rs
-@@ -151,7 +151,7 @@ fn mkfs<'a>(
+@@ -151,13 +151,17 @@ fn mkfs<'a>(
              t.cmd.arg("-m");
              t.cmd.arg(format!("uuid={u}"));
          }
@@ -11,6 +11,18 @@ index 0db968b..bd5853b 100644
              t.cmd.arg("-U");
              t.cmd.arg(u.to_string());
          }
+     };
+-    // Today all the above mkfs commands take -L
+-    t.cmd.args(["-L", label]);
++    // Most mkfs commands take -L for the label; f2fs uses -l.
++    if matches!(fs, Filesystem::F2fs) {
++        t.cmd.args(["-l", label]);
++    } else {
++        t.cmd.args(["-L", label]);
++    }
+     t.cmd.args(opts);
+     t.cmd.arg(dev);
+     // All the mkfs commands are unnecessarily noisy by default
 diff --git i/crates/lib/src/install/config.rs w/crates/lib/src/install/config.rs
 index 7f123e4..62a0f56 100644
 --- i/crates/lib/src/install/config.rs

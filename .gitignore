@@ -12,5 +12,3 @@
 *.qcow2
 *.raw
 *.img
-# SSH test keys
-/tests/keys/

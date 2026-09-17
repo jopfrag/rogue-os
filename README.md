@@ -1,87 +1,61 @@
 # CachyOS bootc
 
 Build a **sealed CachyOS bootc OCI image** (composefs backend, systemd-boot, unsigned UKI)
-from scratch, and test it end-to-end in a disposable libvirt/QEMU/KVM virtual machine.
+and test it in a disposable VM with [`bcvk`](https://github.com/bootc-dev/bcvk) — rootless,
+file-based, no installer ISO and no host root.
 
 The image is **sealed**: the composefs digest of the root filesystem is embedded in the
 Unified Kernel Image and enforced via fs-verity. **Secure Boot is not used** and the UKI is
 **unsigned**.
 
-This repository contains the implementation of the image build itself; it does **not** wrap a
-prebuilt CachyOS bootc image, and it does **not** use `bootc-image-builder`.
+This repository contains the implementation of the image build itself; it does **not** wrap
+a prebuilt CachyOS bootc image, and it does **not** use `bootc-image-builder`.
 
-To install the image by hand from a stock Arch Linux ISO (no custom installer ISO), see
-[`INSTALL.md`](INSTALL.md).
-
-## Two targets
-
-This repository exposes two independent targets that share only `Containerfile`:
-
-1. **CI image build** — a GitHub Actions workflow (`.github/workflows/build-image.yaml`)
-   that builds the OCI image. PRs build only; main pushes build and push to GHCR.
-2. **VM test** — a `make vm-test` workflow that installs the image into a disposable
-   libvirt/QEMU/KVM VM and runs automated tests (install, boot, smoke, update, rollback).
-   Consumes an image reference and installer ISO; builds neither.
+- [`TEST.md`](TEST.md) — testing the image with bcvk (`ephemeral` and `libvirt run`).
+- [`INSTALL.md`](INSTALL.md) — by-hand install from a stock Arch Linux ISO.
 
 ## Prerequisites
 
-- A Linux host with KVM, QEMU and libvirt, reachable from the development environment.
-- `podman`, `virsh`, `qemu-img`, `xorriso`, `git`, `make`, `curl`, `ssh`.
-- The host firewall must permit traffic from the libvirt bridge to the registry.
+- A Linux host with KVM, QEMU and libvirt reachable from the development environment.
+- `podman`, `bcvk`, `qemu-img`, `virtiofsd`, `git`, `curl`, `ssh`.
 
 ## Usage
 
 ```sh
-# Image build (Target 1)
-make build          # build the CachyOS bootc OCI image
-make lint           # bootc container lint + shellcheck checks
-make image-test     # fast image-level checks (no VM)
+# Build the image
+podman build -t localhost:5000/cachyos-bootc:test -f Containerfile .
 
-# Installer / registry (supporting tools)
-make installer      # build the CachyOS installer live ISO
-make registry-push  # start registry and push the image
+# Versioned images for update/rollback testing
+podman build --build-arg IMAGE_VERSION=1 -t localhost:5000/cachyos-bootc:v1 -f Containerfile .
+podman build --build-arg IMAGE_VERSION=2 -t localhost:5000/cachyos-bootc:v2 -f Containerfile .
 
-# VM test (Target 2) — consumes image + ISO, builds neither
-make vm-test        # install -> boot -> smoke test
-make vm-install     # install into a VM and keep it for inspection
-make vm-update      # install v1 -> boot -> update to v2 -> verify
-make vm-rollback    # install v1 -> update to v2 -> roll back to v1 -> verify
+# Test (details in TEST.md)
+bcvk ephemeral run-ssh localhost:5000/cachyos-bootc:test -- bootc status
 
-# Versioned images for update/rollback tests
-make image-v1       # build a v1 image
-make image-v2       # build a v2 image
+bcvk libvirt -c qemu:///session run \
+  --composefs-backend --firmware uefi-insecure --disable-tpm \
+  --name cachy-test --disk-size 24G --detach --ssh-wait --replace \
+  localhost:5000/cachyos-bootc:test
 
-make clean          # remove local build and test artifacts
+# Local OCI registry (for bootc update/switch testing)
+podman run -d --name cachyos-bootc-registry --network host \
+  -v "$PWD/registry-data:/var/lib/registry:z" docker.io/library/registry:2
+podman tag localhost:5000/cachyos-bootc:test 192.168.122.1:5000/cachyos-bootc:test
+podman push --tls-verify=false 192.168.122.1:5000/cachyos-bootc:test
 ```
-
-Commands are safe to run repeatedly. Use `RUN_ARGS=--keep` to keep the test VM, or
-`RUN_ARGS="--image REF"` to override the image under test.
 
 ## Layout
 
 ```
-.github/workflows/   CI image build workflow (Target 1)
-vm-test/             Disposable VM test workflow (Target 2)
-  config.env           Registry/image/ISO defaults
-  run.sh               End-to-end: install -> boot -> smoke
-  install.sh           Boot installer, install to disk
-  boot.sh              Boot installed system, wait for SSH
-  smoke.sh             Verify sealed deployment, bootc, systemd
-  upgrade.sh           v1 -> v2 update test
-  rollback.sh          Rollback after update test
-  lib/vm.sh            Libvirt/QEMU/KVM helpers
-  lib/ssh.sh           SSH helpers for test VMs
-Containerfile        CachyOS bootc image build (shared by both targets)
+.github/workflows/   CI image build workflow
+Containerfile        CachyOS bootc image build
 Containerfile.md     Explanation of the Containerfile
-Containerfile.uki    Read-only reference for the UKI/composefs build (do not modify)
-Makefile             Thin dispatchers for both targets
-installer/           Installer environment build + installation logic
-tests/image/         VM-less image validation
-hack/                Helper scripts (registry, build, lint, shell)
-contrib/             Third-party reference material and attribution
+bootc-f2fs.patch     Local bootc patch (f2fs support)
+TEST.md              Testing with bcvk
+INSTALL.md           Manual install from a stock Arch ISO
 ```
 
 ## License and attribution
 
-This project builds on the ideas and, where noted, adapted code from third-party projects.
-See `contrib/` for attribution and license information.
+This project builds on the ideas and, where noted, adapted code from third-party projects,
+in particular bootcrew/mono and its predecessor bootcrew/arch-bootc (Apache-2.0).

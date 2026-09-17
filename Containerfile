@@ -63,6 +63,7 @@ RUN pacman -Syu --noconfirm --needed \
         skopeo podman fuse-overlayfs \
         dbus dbus-glib glib2 shadow \
         openssh \
+        bubblewrap \
         efibootmgr \
         cachyos-rate-mirrors \
     && pacman -Scc --noconfirm

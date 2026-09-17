@@ -4,8 +4,6 @@ This document explains the `Containerfile` that builds the sealed CachyOS bootc 
 The `Containerfile` itself is kept deliberately free of comments; the rationale for each
 step lives here.
 
-- Third-party attribution: `contrib/ATTRIBUTION.md`
-
 ## Overview
 
 The image is **sealed**:
@@ -31,8 +29,8 @@ The build has five stages:
 4. **sealed-uki** — `bootc container ukify` builds the unsigned UKI.
 5. **final** — the split rootfs plus the UKI at `/boot/EFI/Linux/<kver>.efi`.
 
-References: the bootc image requirements (`docs/src/bootc-images.md`) and the sealed
-composefs + UKI pattern in `Containerfile.uki` (a read-only reference in this repository).
+References: the upstream bootc image requirements (`bootc-dev/bootc`,
+`docs/src/bootc-images.md`).
 
 ## Global build arguments
 
@@ -90,9 +88,11 @@ reviewable local patch that adds `f2fs` as an install filesystem. Upstream bootc
 `supports_fsverity() == ext4 | btrfs`, so without it `bootc install` rejects f2fs with
 `Unknown filesystem: f2fs` (or *"does not support fs-verity"*). The patch adds an `F2fs`
 variant, the `"f2fs"` parse arm, `F2fs` in `supports_fsverity()`, and the corresponding
-exhaustiveness arm in `baseline.rs`. It applies cleanly to the pinned bootc commit; it must
-be re-checked when `BOOTC_VERSION`/`BOOTC_COMMIT` are bumped. See the full f2fs
-investigation and end-to-end verification results in this document's "Default root
+exhaustiveness arm in `baseline.rs`. `baseline.rs` also handles the filesystem UUID
+(`-U`) and now emits the label flag f2fs actually accepts (`-l`, not the generic `-L`),
+which is required by `bootc install to-disk`. It applies cleanly to the pinned bootc
+commit; it must be re-checked when `BOOTC_VERSION`/`BOOTC_COMMIT` are bumped. See the full
+f2fs investigation and end-to-end verification results in this document's "Default root
 filesystem" section below.
 
 `make bin` builds the binary, `make install` installs the systemd units, dracut module, and
@@ -117,6 +117,9 @@ Beyond the base system, the packages are:
 - `systemd` (from `base`) also ships systemd-boot (`bootctl` + `systemd-bootx64.efi`), so no
   separate systemd-boot package is required. **`bootupd` is deliberately not installed.**
 - `dbus`, `shadow`, `openssh` — userspace.
+- `bubblewrap` — required in the image by `bcvk`, the rootless test tool: `bcvk` re-execs
+  itself through a bubblewrap namespace inside a container created from this image, and
+  refuses to run if `bwrap` is absent.
 - `efibootmgr` — used by `bootctl` to manage EFI boot variables during install.
 - `cachyos-rate-mirrors` — keeps the installed system's mirrorlist fast and working.
 
@@ -126,7 +129,7 @@ Pacman's mutable state is moved out of `/var` so the image's `/var` is (nearly) 
 required by bootc's `var-tmpfiles` lint. On a bootc system `/var` is machine-local state and
 only the image's initial `/var` content is provisioned; keeping the package database and
 cache there would interfere. Adapted from `bootcrew/arch-bootc` and `bootcrew/mono`
-(Apache-2.0); see `contrib/ATTRIBUTION.md`.
+(Apache-2.0).
 
 The three standard writable locations (`DBPath`, `CacheDir`, `LogFile`) are relocated
 explicitly rather than parsed out of `pacman.conf`, so this does not drift with the base.
@@ -165,8 +168,7 @@ bakes into the UKI:
 - `sshd` — remote access.
 - `systemd-boot-update.service` — copies the current `systemd-bootx64.efi` onto the ESP on
   each boot, keeping the boot *loader* in sync with the image across updates (bootc only
-  manages the UKI, not the loader binary). Enabling it mirrors the Fedora reference
-  `Containerfile.uki`.
+  manages the UKI, not the loader binary).
 - `cachyos-rate-mirrors.timer` — periodically re-ranks mirrors so the installed system keeps
   a fast, working mirrorlist without manual intervention.
 - `systemd-firstboot.service` is **masked** to avoid first-boot interactive prompts.
@@ -180,7 +182,7 @@ to UTC so nothing prompts.
 
 - Root login is allowed **by key only** (`PermitRootLogin prohibit-password`,
   `PasswordAuthentication no`). The test harness injects an ephemeral public key at install
-  time (see `installer/stage/install-bootc.sh`), so no password is needed.
+  time, so no password is needed.
 - **Host keys are not baked into the image**: every install of a shared image would
   otherwise share the same host keys (MITM-able). Any pre-generated keys are removed and
   `sshdgenkeys.service` (Arch's host-key generator) creates machine-unique keys on first
@@ -199,9 +201,8 @@ to UTC so nothing prompts.
 ### composefs /etc and /var bind mounts
 
 `/usr/lib/composefs/setup-root-conf.toml` binds `/etc` and `/var` onto the writable
-`/sysroot`. This is the composefs-native layout recommended by bootc and shown in
-`Containerfile.uki`; it keeps `/etc` and `/var` writable under an otherwise read-only
-composefs root.
+`/sysroot`. This is the composefs-native layout recommended by bootc; it keeps `/etc` and
+`/var` writable under an otherwise read-only composefs root.
 
 ### Initramfs generation
 
@@ -222,7 +223,7 @@ exactly one kernel directory.
 
 Required by bootc (ostree symlink, `/var` as the writable tree, tmpfiles for `/var`
 subdirectories, composefs prepare-root config). Adapted from `bootcrew/mono`
-`shared/bootc-rootfs.sh` (Apache-2.0); see `contrib/ATTRIBUTION.md`.
+`shared/bootc-rootfs.sh` (Apache-2.0).
 
 - `/boot`, `/home`, `/root`, `/usr/local`, `/srv`, `/opt`, `/mnt` are removed and recreated
   as symlinks into `/var` (or `/sysroot`), because bootc treats `/var` as the writable,
@@ -253,8 +254,8 @@ and `/tmp` are emptied, and `/var/cache` and `/var/log` are re-created. This sat
 Containerfile for update/rollback testing; because the marker lives in `/usr` (part of the
 immutable composefs image), a v1→v2 update changes the composefs digest and the deployment
 visibly. Distinct versions therefore get distinct composefs digests. The default `1` means a
-plain `podman build` is a valid v1. `make image-v1` / `make image-v2` build the versioned
-images.
+plain `podman build` is a valid v1. Build versioned images with
+`podman build --build-arg IMAGE_VERSION=N -t localhost:5000/cachyos-bootc:vN -f Containerfile .`.
 
 ### Lint
 
