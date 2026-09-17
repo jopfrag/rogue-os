@@ -16,7 +16,7 @@ podman pull ghcr.io/jopfrag/rogue:latest
 Or build it yourself:
 
 ```sh
-podman build -t rogue:latest -f Containerfile .
+podman build -t ghcr.io/jopfrag/rogue:latest -f Containerfile .
 ```
 
 ## Install

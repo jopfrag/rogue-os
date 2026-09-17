@@ -7,7 +7,7 @@
 # Note: the install (bcvk to-disk) intermittently fails with
 # "Finalizing filesystem root: mount point is busy"; just re-run `just`.
 
-image       := env("IMAGE", "rogue:latest")
+image       := env("IMAGE", "localhost/rogue:latest")
 vm          := env("VM", "rogue-test")
 connect     := env("BCVK_CONNECT", "qemu:///session")
 disk_size   := env("DISK_SIZE", "24G")
