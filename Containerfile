@@ -203,15 +203,7 @@ COPY --from=bootc-builder /output/usr/bin/bootc /usr/bin/bootc
 
 RUN --mount=type=bind,from=split,target=/target \
     --mount=type=bind,from=split,source=/kernel,target=/kernel \
-    <<'EORUN'
-set -euo pipefail
-kver="$(ls /kernel)"
-install -d /out
-bootc container ukify \
-    --rootfs /target \
-    --kernel-dir "/kernel/${kver}" \
-    -- --output "/out/${kver}.efi"
-EORUN
+    sh -c 'set -euo pipefail && kver="$(ls /kernel)" && install -d /out && bootc container ukify --rootfs /target --kernel-dir "/kernel/${kver}" -- --output "/out/${kver}.efi"'
 
 # ---------------------------------------------------------------------------
 
