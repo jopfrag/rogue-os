@@ -16,7 +16,7 @@ disable_tpm := env("DISABLE_TPM", "true")
 
 # build the image, install + boot a libvirt VM, then ssh in
 default:
-    podman build -t {{image}} -f Containerfile .
+    podman build -t {{image}} --build-arg TEST_PKGS=bubblewrap -f Containerfile .
     bcvk libvirt -c {{connect}} run \
         --composefs-backend \
         --firmware {{firmware}} \

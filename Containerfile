@@ -3,11 +3,10 @@ ARG BOOTC_COMMIT=fa0d3f9cb9a0ce3b4d1dc2607a0bf5e31b822f60
 ARG CACHYOS_MIRROR=""
 ARG KERNEL_PKGS="linux-cachyos-server-lto"
 ARG FIRMWARE_PKGS="linux-firmware amd-ucode"
+ARG TEST_PKGS=""
 
-FROM docker.io/cachyos/cachyos-v3:latest AS bootc-builder
+FROM docker.io/cachyos/cachyos-v3:latest AS cachyos-base
 
-ARG BOOTC_VERSION
-ARG BOOTC_COMMIT
 ARG CACHYOS_MIRROR
 
 RUN sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf \
@@ -15,6 +14,11 @@ RUN sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf \
          : > /etc/pacman.d/cachyos-mirrorlist; \
          for m in ${CACHYOS_MIRROR}; do printf 'Server = %s\n' "$m" >> /etc/pacman.d/cachyos-mirrorlist; done; \
        fi
+
+FROM cachyos-base AS bootc-builder
+
+ARG BOOTC_VERSION
+ARG BOOTC_COMMIT
 
 RUN pacman -Sy --noconfirm --needed \
         base base-devel rust make git go-md2man pkgconf ostree glibc \
@@ -30,32 +34,26 @@ ENV CARGO_PROFILE_RELEASE_DEBUG=false \
 
 COPY bootc-f2fs.patch /tmp/bootc-f2fs.patch
 
-RUN git clone --depth 1 --branch "${BOOTC_VERSION}" \
+RUN --mount=type=cache,target=/root/.cargo,sharing=locked \
+    --mount=type=cache,target=/build,sharing=locked \
+    git clone --depth 1 --branch "${BOOTC_VERSION}" \
         https://github.com/bootc-dev/bootc.git /tmp/bootc \
     && git -C /tmp/bootc checkout "${BOOTC_COMMIT}" \
     && git -C /tmp/bootc apply /tmp/bootc-f2fs.patch \
+    && mkdir -p /build/target \
+    && ln -s /build/target /tmp/bootc/target \
     && make -C /tmp/bootc bin DESTDIR=/output \
     && make -C /tmp/bootc install DESTDIR=/output \
     && rm -rf /tmp/bootc
 
 # ---------------------------------------------------------------------------
 
-FROM docker.io/cachyos/cachyos-v3:latest AS rootfs
+FROM cachyos-base AS rootfs
 
-ARG CACHYOS_MIRROR
 ARG KERNEL_PKGS
 ARG FIRMWARE_PKGS
+ARG TEST_PKGS
 
-RUN sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf \
-    && if [[ -n "${CACHYOS_MIRROR}" ]]; then \
-         : > /etc/pacman.d/cachyos-mirrorlist; \
-         for m in ${CACHYOS_MIRROR}; do printf 'Server = %s\n' "$m" >> /etc/pacman.d/cachyos-mirrorlist; done; \
-       fi
-
-# The CachyOS base image ships base-devel, i.e. gcc/make/autoconf/... and their
-# toolchain dependencies. A sealed server image never compiles anything, so drop
-# it. sudo and diffutils are not build tools but are only pulled in as
-# base-devel dependencies, so they are re-installed explicitly.
 RUN pacman -Syu --noconfirm --needed \
         base \
         ${KERNEL_PKGS} \
@@ -67,7 +65,7 @@ RUN pacman -Syu --noconfirm --needed \
         skopeo podman fuse-overlayfs \
         dbus dbus-glib glib2 shadow \
         openssh \
-        bubblewrap \
+        ${TEST_PKGS} \
         efibootmgr \
         nftables \
         smartmontools sysstat lm_sensors irqbalance \
@@ -91,9 +89,6 @@ RUN install -d /usr/lib/sysimage/pacman \
 
 COPY --from=bootc-builder /output /
 
-# Static image files: systemd units and drop-ins, tmpfiles, sysctl/ssh/network
-# config, dracut/kargs/composefs config, and the auto-reboot helper. These live
-# under root/ in the build context and are copied into the rootfs verbatim.
 COPY root /
 
 RUN systemctl enable systemd-networkd systemd-resolved systemd-timesyncd sshd \
@@ -154,16 +149,9 @@ RUN install -d /kernel \
 
 # ---------------------------------------------------------------------------
 
-FROM docker.io/cachyos/cachyos-v3:latest AS sealed-uki
+FROM cachyos-base AS sealed-uki
 
-ARG CACHYOS_MIRROR
-
-RUN sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf \
-    && if [[ -n "${CACHYOS_MIRROR}" ]]; then \
-         : > /etc/pacman.d/cachyos-mirrorlist; \
-         for m in ${CACHYOS_MIRROR}; do printf 'Server = %s\n' "$m" >> /etc/pacman.d/cachyos-mirrorlist; done; \
-       fi \
-    && pacman -Sy --noconfirm --needed systemd-ukify ostree libselinux \
+RUN pacman -Sy --noconfirm --needed systemd-ukify ostree libselinux \
     && pacman -Scc --noconfirm
 COPY --from=bootc-builder /output/usr/bin/bootc /usr/bin/bootc
 

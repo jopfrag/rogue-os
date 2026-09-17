@@ -21,7 +21,8 @@ The image is **sealed**:
 The image is built from the CachyOS/Arch base image. This repository constructs the bootc
 image itself; it does not derive from another bootc image.
 
-The build has five stages:
+After a shared `cachyos-base` stage (the base image plus the pacman sandbox/mirror
+fixup, so it is not repeated per stage), the build has five stages:
 
 1. **bootc-builder** — compile the `bootc` binary from source.
 2. **rootfs** — CachyOS base + kernel/initramfs/systemd, laid out per bootc.
@@ -48,6 +49,9 @@ References: the upstream bootc image requirements (`bootc-dev/bootc`,
 - `FIRMWARE_PKGS` — firmware packages. The default is `linux-firmware amd-ucode`: the full
   firmware set (so the image is not tied to one machine's GPU/NIC) plus AMD CPU microcode.
   Override with `--build-arg` (e.g. `intel-ucode`) for a different CPU vendor.
+- `TEST_PKGS` — test-only packages. Defaults to empty; `bcvk` needs `bubblewrap` inside the
+  image, so the `Justfile` passes `--build-arg TEST_PKGS=bubblewrap`, while production
+  builds leave it empty and ship without `bwrap`.
 
 ## Stage 1 — bootc-builder
 
@@ -60,9 +64,12 @@ base image sandboxes downloads and package hooks (Landlock/seccomp), but that sa
 isolate the network inside a rootless podman build, which makes package hooks (`depmod`,
 `dracut`, `systemd`) fail. Disabling it is required for the build.
 
-The optional `CACHYOS_MIRROR` pin is applied here (and in every other stage that runs
-pacman). When empty, the base image's default mirrorlist (with fallback) is used; this is
-the robust default given recurring upstream mirror flakiness.
+Both the `DisableSandbox` edit and the optional `CACHYOS_MIRROR` pin live in one dedicated
+first stage, `cachyos-base`, and `bootc-builder`, `rootfs` and `sealed-uki` are all based on
+it. This applies them exactly once instead of repeating the `RUN` in every pacman-using
+stage, and lets those stages share the layer. When `CACHYOS_MIRROR` is empty, the base
+image's default mirrorlist (with fallback) is used; that is the robust default given
+recurring upstream mirror flakiness.
 
 ### Build dependencies
 
@@ -81,6 +88,13 @@ The upstream Makefile builds the `release` profile, which keeps debug info and y
 for size (~10 MiB) **without** changing the Makefile:
 
 - `DEBUG=false`, `STRIP=true`, `LTO=true`, `OPT_LEVEL=s`, `CODEGEN_UNITS=1`, `PANIC=abort`.
+
+The Makefile hardcodes the in-tree `target/` path (so `CARGO_TARGET_DIR` cannot be
+used), so the build step creates `ln -s /build/target /tmp/bootc/target`; cargo writes
+through the symlink into the cache mount, and `rm -rf /tmp/bootc` later only unlinks it.
+The bootc compile is already reused from the layer cache while nothing upstream changes,
+but on a `BOOTC_VERSION`/`BOOTC_COMMIT`/patch bump the cargo cache makes the rebuild
+incremental instead of a cold ~15 minute compile.
 
 ### f2fs patch
 
@@ -121,9 +135,11 @@ Beyond the base system, the packages are:
 - `systemd` (from `base`) also ships systemd-boot (`bootctl` + `systemd-bootx64.efi`), so no
   separate systemd-boot package is required. **`bootupd` is deliberately not installed.**
 - `dbus` + `dbus-glib` + `glib2`, `shadow`, `openssh` — userspace.
-- `bubblewrap` — required in the image by `bcvk`, the rootless test tool: `bcvk` re-execs
-  itself through a bubblewrap namespace inside a container created from this image, and
-  refuses to run if `bwrap` is absent.
+- `${TEST_PKGS}` — test-only packages. `bcvk` (the rootless test tool) re-execs itself
+  through a bubblewrap namespace inside a container created from this image, and refuses to
+  run if `bwrap` is absent; the `Justfile` therefore builds with
+  `--build-arg TEST_PKGS=bubblewrap`. The default is empty, so production images do not
+  ship `bubblewrap`.
 - `efibootmgr` — used by `bootctl` to manage EFI boot variables during install.
 - `nftables` — firewall. `nftables.service` is enabled with the package's default
   `/etc/nftables.conf` (`drop` policy; allows loopback, established/related, ICMP, SSH).
