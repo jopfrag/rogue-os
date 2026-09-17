@@ -171,6 +171,19 @@ Notes (verified):
 - **Update/rollback work**: `bootc switch` to a v2 image stages a composefs/UKI deployment
   (`bootType: Uki`, `missingVerityAllowed: false`); reboot boots v2; `bootc rollback` returns
   to v1. The plain-HTTP test registry requires an `insecure = true` entry on the guest.
+- **f2fs works sealed and is now the default** (Task 29/30). The kernel's `f2fs.ko` in
+  `linux-cachyos 7.2.5-1` exports `f2fs_verityops` / `f2fs_begin_enable_verity`, but two
+  local changes were needed because upstream `bootc` hardcodes `Filesystem { Xfs, Ext4,
+  Btrfs }` and `supports_fsverity() == ext4|btrfs`, and f2fs is a loadable module (ext4 is
+  built-in `=y`): (1) `bootc-f2fs.patch` adds an `F2fs` variant + `"f2fs"` parse +
+  `supports_fsverity()` — see `docs/design.md`; (2) `Containerfile` dracut
+  `add_drivers+=" f2fs "` so the module lands in the UKI initramfs (otherwise
+  `sysroot.mount` fails → emergency mode). Verified: install, boot sealed (16/16 smoke),
+  `bootc switch` update, `bootc rollback` all pass with `/sysroot` on f2fs.
+- **Filesystem chosen by the harness**: `tests/vm/install.sh` and `run.sh` accept
+  `ROOTFS=<type>` (default `f2fs`) which sets `BOOTC_INSTALL_ROOTFS`; the installer formats
+  `ext4`/`xfs`/`btrfs`/`f2fs`. The installer now does `modprobe <rootfs>` + `mount -t <rootfs>`
+  since the live initramfs does not pre-load every filesystem module.
 
 ## VM networking and the local registry path
 

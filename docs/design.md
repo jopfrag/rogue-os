@@ -62,14 +62,42 @@ include systemd-boot and must **not** include `bootupd`.
 
 ## Installation model
 
-- Simple GPT layout: EFI System Partition + root filesystem (ext4 initially).
+- Simple GPT layout: EFI System Partition + root filesystem (f2fs; default).
 - No LUKS, LVM, btrfs subvolumes, RAID, or Secure Boot. Secure Boot is out of scope; the
   image is sealed (composefs + fs-verity) but the UKI is unsigned.
-- The root filesystem must support fs-verity (ext4/btrfs).
+- The root filesystem must support fs-verity. f2fs is the default (verified sealed); btrfs
+  is the only other bootc-supported fs-verity filesystem; ext4 is built-in in the kernel
+  but bootc's `supports_fsverity()` marks only ext4/btrfs/f2fs (f2fs requires the local
+  bootc patch, see below).
 - The installer environment owns partitioning, filesystem creation and mounting.
 - The bootc image owns the OS contents, kernel, initramfs, systemd, and the UKI.
 - Installation path: `bootc install to-filesystem <root>` then `bootc install finalize <root>`.
   With a UKI present, bootc uses the composefs backend and installs systemd-boot.
+
+### f2fs is the default sealed root (verified; requires a small bootc patch)
+
+The sealed (composefs + fs-verity) image installs and boots on an **f2fs** root, with
+`/sysroot` genuinely f2fs and fs-verity enforced. Verified end-to-end (install, boot,
+sealed smoke test, `bootc switch` update, `bootc rollback`) with the default path.
+
+Two small, local changes are required because upstream bootc does not know f2fs (checked
+against pinned 1.16.13 and current `main`):
+
+- **bootc enum** (`bootc-f2fs.patch`, applied in `Containerfile`): add an `F2fs` variant to
+  `Filesystem`, accept `"f2fs"` in `TryFrom<&str>`, and include `F2fs` in
+  `supports_fsverity()`. This removes the `Unknown filesystem: f2fs` and *"does not support
+  fs-verity"* rejections. (An extra `F2fs` arm in `baseline.rs`'s `mkfs` match is required
+  for exhaustiveness; it is only exercised by `bootc install to-disk`, which this project
+  does not use.)
+- **dracut driver** (`Containerfile`): `add_drivers+=" f2fs "`. The CachyOS `f2fs.ko` is a
+  loadable module (ext4 is `=y` built-in), so the UKI initramfs must carry it or the
+  initramfs `sysroot.mount` fails ("Failed to mount Root Partition" → emergency mode).
+
+The kernel-side support was already there: `linux-cachyos`'s `f2fs.ko` exports
+`f2fs_verityops` / `f2fs_begin_enable_verity` / `f2fs_get_verity_descriptor`.
+
+`f2fs-tools` (including `fsck.f2fs`) is added to the image for repair/resize parity, and
+the default `00-cachyos.toml` / installer default / test harness default are all `f2fs`.
 
 ## bootc install requirements (Task 2, verified against bootc 1.16.12 + upstream docs)
 

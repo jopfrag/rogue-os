@@ -8,7 +8,7 @@
 #   bootc.install.imgref=<image reference>   (required)
 #   bootc.install.target=container|filesystem  (default: container)
 #   bootc.install.device=<block device>      (default: /dev/vda)
-#   bootc.install.rootfs=<ext4|xfs|btrfs>    (default: ext4)
+#   bootc.install.rootfs=<ext4|xfs|btrfs|f2fs>  (default: f2fs)
 #   bootc.install.action=reboot|poweroff     (default: poweroff)
 #   bootc.install.finalize=yes|no            (default: yes)
 #
@@ -46,7 +46,7 @@ cmdline_val() {
 }
 imgref="${BOOTC_INSTALL_IMGREF:-}"; v="$(cmdline_val bootc.install.imgref)"; [[ -n "$v" ]] && imgref="$v"
 device="${BOOTC_INSTALL_DEVICE:-/dev/vda}"; v="$(cmdline_val bootc.install.device)"; [[ -n "$v" ]] && device="$v"
-rootfs="${BOOTC_INSTALL_ROOTFS:-ext4}"; v="$(cmdline_val bootc.install.rootfs)"; [[ -n "$v" ]] && rootfs="$v"
+rootfs="${BOOTC_INSTALL_ROOTFS:-f2fs}"; v="$(cmdline_val bootc.install.rootfs)"; [[ -n "$v" ]] && rootfs="$v"
 action="${BOOTC_INSTALL_ACTION:-poweroff}"; v="$(cmdline_val bootc.install.action)"; [[ -n "$v" ]] && action="$v"
 finalize="${BOOTC_INSTALL_FINALIZE:-yes}"; v="$(cmdline_val bootc.install.finalize)"; [[ -n "$v" ]] && finalize="$v"
 # Optional path to an SSH public key for root. bootc injects it via tmpfiles.d so it is
@@ -108,13 +108,19 @@ case "${rootfs}" in
     ext4)  mkfs.ext4 -L root -F "${device}2" ;;
     xfs)   mkfs.xfs -f -L root "${device}2" ;;
     btrfs) mkfs.btrfs -f -L root "${device}2" ;;
+    f2fs)  mkfs.f2fs -f -l root "${device}2" ;;
     *)     die "unsupported root filesystem: ${rootfs}" ;;
 esac
 
 # --- mount the target -------------------------------------------------------
 target=/mnt/target
 mkdir -p "${target}"
-mount "${device}2" "${target}"
+# Explicitly make the chosen filesystem's kernel module available before mounting.
+# The live image's initramfs only bundles the live-image drivers (not every filesystem
+# driver); for a module-backed filesystem the full module tree is under /usr/lib/modules
+# only after switch-root, so `modprobe`+explicit `-t` avoids relying on mount auto-probe.
+modprobe "${rootfs}" 2>/dev/null || true
+mount -t "${rootfs}" "${device}2" "${target}"
 mkdir -p "${target}/boot/efi"
 mount "${device}1" "${target}/boot/efi"
 

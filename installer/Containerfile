@@ -30,7 +30,7 @@ RUN pacman -Syu --noconfirm --needed \
         linux linux-firmware \
         dracut cpio \
         ostree libselinux skopeo podman fuse-overlayfs \
-        e2fsprogs xfsprogs btrfs-progs dosfstools util-linux \
+        e2fsprogs xfsprogs btrfs-progs f2fs-tools dosfstools util-linux \
         gptfdisk parted \
         curl dhcpcd iproute2 \
         dbus dbus-glib glib2 shadow \

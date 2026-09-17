@@ -78,9 +78,14 @@ ENV CARGO_PROFILE_RELEASE_DEBUG=false \
     CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
     CARGO_PROFILE_RELEASE_PANIC=abort
 
+# Local patch: allow f2fs as a (fs-verity capable) install filesystem. Simple, reviewable;
+# applies cleanly to the pinned bootc commit. See docs/design.md for the f2fs investigation.
+COPY bootc-f2fs.patch /tmp/bootc-f2fs.patch
+
 RUN git clone --depth 1 --branch "${BOOTC_VERSION}" \
         https://github.com/bootc-dev/bootc.git /tmp/bootc \
     && git -C /tmp/bootc checkout "${BOOTC_COMMIT}" \
+    && git -C /tmp/bootc apply /tmp/bootc-f2fs.patch \
     && make -C /tmp/bootc bin DESTDIR=/output \
     && make -C /tmp/bootc install DESTDIR=/output \
     && rm -rf /tmp/bootc
@@ -109,7 +114,7 @@ RUN sed -i '/^\[options\]/a DisableSandbox' /etc/pacman.conf \
 #     build a portable image (e.g. FIRMWARE_PKGS="linux-firmware").
 #   - dracut + cpio: initramfs generation
 #   - ostree/libselinux: bootc dependencies (ostree also provides the bootc backend data)
-#   - filesystem tools: e2fsprogs, xfsprogs, btrfs-progs, dosfstools
+#   - filesystem tools: e2fsprogs, xfsprogs, btrfs-progs, f2fs-tools, dosfstools
 #   - systemd-ukify: builds the UKI (pulls binutils, python-pefile, ...)
 #   - skopeo/podman: image transport and pulling
 #   - systemd (base) also ships systemd-boot (bootctl + systemd-bootx64.efi), so no
@@ -122,7 +127,7 @@ RUN pacman -Syu --noconfirm --needed \
         ${FIRMWARE_PKGS} \
         dracut cpio \
         ostree libselinux \
-        btrfs-progs e2fsprogs xfsprogs dosfstools \
+        btrfs-progs e2fsprogs xfsprogs f2fs-tools dosfstools \
         systemd-ukify \
         skopeo podman fuse-overlayfs \
         dbus dbus-glib glib2 shadow \
@@ -159,9 +164,12 @@ COPY --from=bootc-builder /output /
 
 # Provide a default root filesystem type for `bootc install` and for external installers
 # that consult `bootc install print-configuration`. The composefs backend enforces
-# fs-verity on a sealed UKI, so the root filesystem must support it; ext4 does.
+# fs-verity on a sealed UKI, so the root filesystem must support it. f2fs is used (not
+# ext4): it supports fs-verity, and the sealed install on f2fs is verified end-to-end
+# (see docs/design.md). f2fs is a loadable module, so it is forced into the initramfs via
+# the dracut add_drivers below.
 RUN install -d /usr/lib/bootc/install \
-    && printf '[install.filesystem.root]\ntype = "ext4"\n' \
+    && printf '[install.filesystem.root]\ntype = "f2fs"\n' \
         > /usr/lib/bootc/install/00-cachyos.toml
 
 # Kernel command line defaults, baked into the UKI by `bootc container ukify`. `rw` makes
@@ -225,7 +233,7 @@ RUN install -d /usr/lib/composefs \
 # There must be exactly one kernel: bootc's split-kernel-and-rootfs/ukify assume a single
 # kernel, and `head -n1` would otherwise silently pick an arbitrary one and produce a UKI
 # that does not match the modules that were loaded. Fail loudly instead.
-RUN printf 'hostonly=no\ncompress=zstd\nadd_dracutmodules+=" ostree bootc "\n' \
+RUN printf 'hostonly=no\ncompress=zstd\nadd_dracutmodules+=" ostree bootc "\nadd_drivers+=" f2fs "\n' \
         > /usr/lib/dracut/dracut.conf.d/10-bootc.conf \
     && test "$(find /usr/lib/modules -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 1 \
     && kver="$(ls /usr/lib/modules)" \

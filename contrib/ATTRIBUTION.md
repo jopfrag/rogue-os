@@ -25,6 +25,10 @@ license and the nature of the adaptation, as required by its license terms.
   recommended base-image reference configuration under `baseimage/`. The sealed
   composefs/UKI build follows the upstream `docs/src/experimental-composefs.md` pattern
   (`bootc container split-kernel-and-rootfs` + `bootc container ukify`).
+- `bootc-f2fs.patch` (in this repository) is a local, minimal patch to bootc source that
+  adds `f2fs` as a known install filesystem (`Filesystem::F2fs`, the `"f2fs"` parse arm,
+  and `supports_fsverity()`), plus the exhaustiveness arm in `baseline.rs`. It is derived
+  from bootc's own source tree and is covered by bootc's dual Apache-2.0/MIT license.
 
 ## bootupd (superseded; not used)
 

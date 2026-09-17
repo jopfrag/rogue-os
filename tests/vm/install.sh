@@ -82,7 +82,7 @@ trap cleanup EXIT
 cat >"${cfg_dir}/install.env" <<EOF
 BOOTC_INSTALL_IMGREF=${vm_imgref}
 BOOTC_INSTALL_DEVICE=/dev/vda
-BOOTC_INSTALL_ROOTFS=ext4
+BOOTC_INSTALL_ROOTFS=${ROOTFS:-f2fs}
 BOOTC_INSTALL_ACTION=poweroff
 BOOTC_INSTALL_FINALIZE=yes
 BOOTC_INSTALL_ROOT_SSH_KEY=root_ssh_key.pub

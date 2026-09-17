@@ -1,15 +1,16 @@
 # Memory
 
-Project context retained after the task tracker (`TASKS.md`) was closed out. The authoritative
-documentation lives in `docs/` and `README.md`; **this file deliberately does not restate it.**
-It indexes where things live and records only the few facts that are not already captured
-elsewhere in the repository.
+Project context index. The task tracker (`TASKS.md`) records current/completed tasks; the
+authoritative documentation lives in `docs/` and `README.md`; **this file deliberately does
+not restate it.** It indexes where things live and records only the few facts that are not
+already captured elsewhere in the repository.
 
 ## Where to look
 
 | Topic | Location |
 |---|---|
 | Architecture, decisions, install flow | `docs/design.md` |
+| f2fs default sealed root (Task 29/30) | `docs/design.md` ("f2fs is the default sealed root"), `TASKS.md`, `bootc-f2fs.patch` |
 | Verified environment facts (uid 107, idmap, CPU model, console, registry path) | `docs/development.md` |
 | Usage, status, commands, repo layout | `README.md` |
 | Image build (5 stages), installer packaging | `Containerfile`, `installer/`, `docs/design.md` |

@@ -64,6 +64,7 @@ artifacts="${ARTIFACTS:-${repo_root}/artifacts/t$(date +%s)-$$}"
 mkdir -p "${artifacts}"
 
 echo "==> [1/3] install"
+export ROOTFS="${ROOTFS:-}"
 INSTALLER_ISO="${iso}" VM_IMAGE_REF="${image}" tests/vm/install.sh --keep --artifacts "${artifacts}" >/tmp/run-install.log 2>&1 || {
     tail -30 /tmp/run-install.log >&2; exit 1
 }

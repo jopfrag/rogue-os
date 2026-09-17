@@ -1,0 +1,42 @@
+diff --git i/crates/lib/src/install/baseline.rs w/crates/lib/src/install/baseline.rs
+index 0db968b..bd5853b 100644
+--- i/crates/lib/src/install/baseline.rs
++++ w/crates/lib/src/install/baseline.rs
+@@ -151,7 +151,7 @@ fn mkfs<'a>(
+             t.cmd.arg("-m");
+             t.cmd.arg(format!("uuid={u}"));
+         }
+-        Filesystem::Btrfs | Filesystem::Ext4 => {
++        Filesystem::Btrfs | Filesystem::Ext4 | Filesystem::F2fs => {
+             t.cmd.arg("-U");
+             t.cmd.arg(u.to_string());
+         }
+diff --git i/crates/lib/src/install/config.rs w/crates/lib/src/install/config.rs
+index 7f123e4..62a0f56 100644
+--- i/crates/lib/src/install/config.rs
++++ w/crates/lib/src/install/config.rs
+@@ -24,6 +24,7 @@ pub(crate) enum Filesystem {
+     Xfs,
+     Ext4,
+     Btrfs,
++    F2fs,
+ }
+ 
+ impl std::fmt::Display for Filesystem {
+@@ -40,6 +41,7 @@ impl TryFrom<&str> for Filesystem {
+             "xfs" => Ok(Self::Xfs),
+             "ext4" => Ok(Self::Ext4),
+             "btrfs" => Ok(Self::Btrfs),
++            "f2fs" => Ok(Self::F2fs),
+             other => anyhow::bail!("Unknown filesystem: {}", other),
+         }
+     }
+@@ -47,7 +49,7 @@ impl TryFrom<&str> for Filesystem {
+ 
+ impl Filesystem {
+     pub(crate) fn supports_fsverity(&self) -> bool {
+-        matches!(self, Self::Ext4 | Self::Btrfs)
++        matches!(self, Self::Ext4 | Self::Btrfs | Self::F2fs)
+     }
+ }
+ 
