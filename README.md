@@ -19,6 +19,18 @@ a prebuilt CachyOS bootc image, and it does **not** use `bootc-image-builder`.
 - A Linux host with KVM, QEMU and libvirt reachable from the development environment.
 - `podman`, `bcvk`, `qemu-img`, `virtiofsd`, `git`, `curl`, `ssh`.
 
+## Task runner
+
+`just` builds the image, installs/boots it in a libvirt VM with bcvk, and drops you into a
+root shell:
+
+```sh
+just                 # podman build -> bcvk libvirt run -> bcvk libvirt ssh
+```
+
+Override via environment: `IMAGE`, `VM`, `BCVK_CONNECT`, `DISK_SIZE`, `FIRMWARE`,
+`DISABLE_TPM`.
+
 ## Usage
 
 ```sh
@@ -51,6 +63,7 @@ podman push --tls-verify=false 192.168.122.1:5000/cachyos-bootc:test
 Containerfile        CachyOS bootc image build
 Containerfile.md     Explanation of the Containerfile
 bootc-f2fs.patch     Local bootc patch (f2fs support)
+Justfile             Task runner for the bcvk workflow
 TEST.md              Testing with bcvk
 INSTALL.md           Manual install from a stock Arch ISO
 ```
