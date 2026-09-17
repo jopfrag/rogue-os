@@ -46,9 +46,15 @@ See `PROMPT.md` for the objective and `AGENTS.md` for how to work.
 
 ### Phase 3 — Cleanup
 
-- [ ] Task 3.1 — Slim the `Makefile` to thin dispatchers over the two targets.
-- [ ] Task 3.2 — Update `README.md` and reconcile `hack/`, `installer/` and
+- [x] Task 3.1 — Slim the `Makefile` to thin dispatchers over the two targets.
+      Evidence: `make test` removed, replaced by `make vm-test`. All VM targets
+      delegate to `vm-test/` scripts. `make build` and `make image-test` unchanged.
+- [x] Task 3.2 — Update `README.md` and reconcile `hack/`, `installer/` and
       `docs/to_be_deleted/` with the new layout.
+      Evidence: README documents two-target layout and vm-test/ structure.
+      `tests/vm/` removed (migrated to vm-test/). `docs/to_be_deleted/` removed.
+      `tests/image/` retained (used by `make image-test`). `hack/lib/` retained
+      (used by `hack/vm-shell.sh`).
 
 ## Blocked
 
