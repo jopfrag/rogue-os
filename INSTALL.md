@@ -55,7 +55,7 @@ partprobe "${disk}"
 udevadm settle
 
 mkfs.vfat -F32 -n EFI "${esp}"
-mkfs.f2fs  -f   -l root "${rootfs}"
+mkfs.f2fs  -f   -l root -i -O extra_attr,inode_checksum,sb_checksum,verity "${rootfs}"
 
 modprobe f2fs
 mkdir -p /mnt/target

@@ -23,6 +23,14 @@ index 0db968b..4bd60a8 100644
      t.cmd.args(opts);
      t.cmd.arg(dev);
      // All the mkfs commands are unnecessarily noisy by default
+@@ -434,5 +434,6 @@
+-    // Unconditionally enable fsverity for ext4
++    // Enable fsverity where mkfs needs an explicit feature flag
+     let mkfs_options = match root_filesystem {
+         Filesystem::Ext4 => ["-O", "verity"].as_slice(),
++        Filesystem::F2fs => ["-i", "-O", "extra_attr,inode_checksum,sb_checksum,verity"].as_slice(),
+         _ => [].as_slice(),
+     };
 diff --git i/crates/lib/src/install/config.rs w/crates/lib/src/install/config.rs
 index 7f123e4..62a0f56 100644
 --- i/crates/lib/src/install/config.rs

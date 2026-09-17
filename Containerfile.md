@@ -106,10 +106,11 @@ reviewable local patch that adds `f2fs` as an install filesystem. Upstream bootc
 variant, the `"f2fs"` parse arm, `F2fs` in `supports_fsverity()`, and the corresponding
 exhaustiveness arm in `baseline.rs`. `baseline.rs` also handles the filesystem UUID
 (`-U`) and now emits the label flag f2fs actually accepts (`-l`, not the generic `-L`),
-which is required by `bootc install to-disk`. It applies cleanly to the pinned bootc
-commit; it must be re-checked when `BOOTC_VERSION`/`BOOTC_COMMIT` are bumped. See the full
-f2fs investigation and end-to-end verification results in this document's "Default root
-filesystem" section below.
+which is required by `bootc install to-disk`, and passes the f2fs mkfs options
+`-i -O extra_attr,inode_checksum,sb_checksum,verity` (see "Default root filesystem"). It
+applies cleanly to the pinned bootc commit; it must be re-checked when
+`BOOTC_VERSION`/`BOOTC_COMMIT` are bumped. See the full f2fs investigation and end-to-end
+verification results in this document's "Default root filesystem" section below.
 
 bootc's upstream `make bin` builds the binary and `make install` installs the systemd
 units, dracut module, and baseimage reference content into `/output`, which later stages
@@ -211,6 +212,16 @@ a known intermittent finalize issue.
 Because f2fs is a loadable module, it is forced into the initramfs via the dracut
 `add_drivers` line below.
 
+`bootc install` formats f2fs with `-i -O extra_attr,inode_checksum,sb_checksum,verity`
+(mkfs options, not mount options):
+
+- `-i` — extended node bitmap (more inodes).
+- `extra_attr,inode_checksum,sb_checksum` — let `fsck.f2fs` detect/repair more corruption.
+- `verity` — sets the `F2FS_FEATURE_VERITY` superblock bit. This matters on current
+  kernels: `f2fs_ioc_enable_verity` (the `FS_IOC_ENABLE_VERITY` handler) returns
+  `-EOPNOTSUPP` unless that bit is set, and upstream bootc only passes `-O verity` for
+  ext4. The patch extends it to f2fs so fs-verity can be enabled.
+
 ### Kernel command line defaults
 
 `/usr/lib/bootc/kargs.d/00-console.toml` sets kernel arguments that `bootc container ukify`
@@ -220,6 +231,10 @@ bakes into the UKI:
   boot.
 - `rw` — makes `/sysroot` writable so the `/etc` and `/var` bind mounts work without a
   workaround.
+- `rootflags=noatime,gc_merge,atgc` — f2fs mount options for the root filesystem (there is
+  no fstab): `noatime` suppresses atime writes (and implies `nodiratime`), `gc_merge` lets
+  background GC absorb foreground GC requests, and `atgc` enables age-threshold GC. `atgc`
+  cannot be toggled on remount without `rw`/`rootflags`, which the `rw` above provides.
 
 ### Enabled services
 
