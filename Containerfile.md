@@ -258,7 +258,7 @@ Containerfile for update/rollback testing; because the marker lives in `/usr` (p
 immutable composefs image), a v1→v2 update changes the composefs digest and the deployment
 visibly. Distinct versions therefore get distinct composefs digests. The default `1` means a
 plain `podman build` is a valid v1. Build versioned images with
-`podman build --build-arg IMAGE_VERSION=N -t localhost:5000/cachyos-bootc:vN -f Containerfile .`.
+`podman build --build-arg IMAGE_VERSION=N -t rogue:vN -f Containerfile .`.
 
 ### Lint
 

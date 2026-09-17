@@ -7,8 +7,8 @@
 # Note: the install (bcvk to-disk) intermittently fails with
 # "Finalizing filesystem root: mount point is busy"; just re-run `just`.
 
-image       := env("IMAGE", "localhost:5000/cachyos-bootc:test")
-vm          := env("VM", "cachy-test")
+image       := env("IMAGE", "rogue:latest")
+vm          := env("VM", "rogue-test")
 connect     := env("BCVK_CONNECT", "qemu:///session")
 disk_size   := env("DISK_SIZE", "24G")
 firmware    := env("FIRMWARE", "uefi-insecure")

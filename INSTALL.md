@@ -1,6 +1,6 @@
 # Installing the sealed CachyOS bootc image from a stock Arch ISO
 
-By-hand install of `ghcr.io/jopfrag/cachyos-bootc:latest`. UEFI-only; Secure Boot must be
+By-hand install of `ghcr.io/jopfrag/rogue:latest`. UEFI-only; Secure Boot must be
 disabled. The result is sealed: composefs root with fs-verity enforced and an unsigned UKI
 booted by systemd-boot.
 
@@ -67,7 +67,7 @@ mount "${esp}" /mnt/target/boot/efi
 ## 5. Install
 
 ```sh
-imgref=ghcr.io/jopfrag/cachyos-bootc:latest
+imgref=ghcr.io/jopfrag/rogue:latest
 podman pull "${imgref}"
 
 podman run --rm --privileged --pid=host --ipc=host \

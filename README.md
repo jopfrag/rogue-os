@@ -1,73 +1,70 @@
-# CachyOS bootc
+# rogue-os
 
-Build a **sealed CachyOS bootc OCI image** (composefs backend, systemd-boot, unsigned UKI)
-and test it in a disposable VM with [`bcvk`](https://github.com/bootc-dev/bcvk) — rootless,
-file-based, no installer ISO and no host root.
+[![Build bootc image](https://github.com/jopfrag/rogue-os/actions/workflows/build-image.yaml/badge.svg)](https://github.com/jopfrag/rogue-os/actions/workflows/build-image.yaml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-The image is **sealed**: the composefs digest of the root filesystem is embedded in the
-Unified Kernel Image and enforced via fs-verity. **Secure Boot is not used** and the UKI is
-**unsigned**.
+A **sealed CachyOS bootc image**: a composefs root protected by fs-verity, booted from an
+**unsigned Unified Kernel Image** via **systemd-boot**. The default root filesystem is
+**f2fs**.
 
-This repository contains the implementation of the image build itself; it does **not** wrap
-a prebuilt CachyOS bootc image, and it does **not** use `bootc-image-builder`.
-
-- [`INSTALL.md`](INSTALL.md) — by-hand install from a stock Arch Linux ISO.
-
-## Prerequisites
-
-- A Linux host with KVM, QEMU and libvirt reachable from the development environment.
-- `podman`, `bcvk`, `qemu-img`, `virtiofsd`, `just`, `git`, `curl`, `ssh`.
-
-## Task runner
-
-`just` builds the image, installs/boots it in a libvirt VM with bcvk, and drops you into a
-root shell:
+## Get the image
 
 ```sh
-just                 # podman build -> bcvk libvirt run -> bcvk libvirt ssh
+podman pull ghcr.io/jopfrag/rogue:latest
 ```
 
-Override via environment: `IMAGE`, `VM`, `BCVK_CONNECT`, `DISK_SIZE`, `FIRMWARE`,
-`DISABLE_TPM`.
-
-## Usage
+Or build it yourself:
 
 ```sh
-# Build the image
-podman build -t localhost:5000/cachyos-bootc:test -f Containerfile .
-
-# Versioned images for update/rollback testing
-podman build --build-arg IMAGE_VERSION=1 -t localhost:5000/cachyos-bootc:v1 -f Containerfile .
-podman build --build-arg IMAGE_VERSION=2 -t localhost:5000/cachyos-bootc:v2 -f Containerfile .
-
-# Test with bcvk
-bcvk ephemeral run-ssh localhost:5000/cachyos-bootc:test -- bootc status
-
-bcvk libvirt -c qemu:///session run \
-  --composefs-backend --firmware uefi-insecure --disable-tpm \
-  --name cachy-test --disk-size 24G --detach --ssh-wait --replace \
-  localhost:5000/cachyos-bootc:test
-
-# Local OCI registry (for bootc update/switch testing)
-podman run -d --name cachyos-bootc-registry --network host \
-  -v "$PWD/registry-data:/var/lib/registry:z" docker.io/library/registry:2
-podman tag localhost:5000/cachyos-bootc:test 192.168.122.1:5000/cachyos-bootc:test
-podman push --tls-verify=false 192.168.122.1:5000/cachyos-bootc:test
+podman build -t rogue:latest -f Containerfile .
 ```
 
-## Layout
+## Install
 
+UEFI only; **Secure Boot must be disabled**. Boot a live Arch Linux environment in UEFI
+mode, prepare the target disk (GPT with an EFI system partition and an f2fs root), then
+install the image:
+
+```sh
+podman run --rm --privileged --pid=host --ipc=host \
+    --security-opt label=disable \
+    -v /dev:/dev \
+    -v /var/lib/containers:/var/lib/containers \
+    -v /mnt/target:/target \
+    ghcr.io/jopfrag/rogue:latest \
+    bootc install to-filesystem \
+        --target-imgref ghcr.io/jopfrag/rogue:latest \
+        --skip-finalize \
+        /target
 ```
-.github/workflows/   CI image build workflow
-Containerfile        CachyOS bootc image build
-Containerfile.md     Explanation of the Containerfile
-bootc-f2fs.patch     Local bootc patch (f2fs support)
-AGENTS.md            Instructions for the coding agent
-Justfile             Task runner for the bcvk workflow
-INSTALL.md           Manual install from a stock Arch ISO
+
+Partitioning, formatting, root SSH key injection and finalization are covered step by step
+in [`INSTALL.md`](INSTALL.md).
+
+## Verify
+
+After booting the installed system:
+
+```sh
+grep -o 'composefs=[0-9a-f]*' /proc/cmdline   # no '?' -> fs-verity is enforced
+bootc status                                   # bootType: Uki, bootloader: systemd
 ```
 
-## License and attribution
+## Requirements
 
-This project builds on the ideas and, where noted, adapted code from third-party projects,
-in particular bootcrew/mono and its predecessor bootcrew/arch-bootc (Apache-2.0).
+- x86-64-v3 (AVX2) machine, UEFI boot, Secure Boot disabled.
+- A target disk (it will be wiped).
+
+## Documentation
+
+| File | |
+|---|---|
+| [`INSTALL.md`](INSTALL.md) | Install from a stock Arch Linux ISO |
+| [`Containerfile.md`](Containerfile.md) | How the image is built |
+| [`LICENSE`](LICENSE) | Apache-2.0 |
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE). The build draws on
+[`bootcrew/mono`](https://github.com/bootcrew/mono) and its predecessor
+`bootcrew/arch-bootc`, and on upstream [`bootc`](https://github.com/bootc-dev/bootc).

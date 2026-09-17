@@ -310,7 +310,7 @@ The test harness must only operate on VMs/resources that it created.
 
 Use unique names, for example:
 
-cachyos-bootc-test-<random-id>
+rogue-os-test-<random-id>
 
 
 Before destroying a VM, verify that it belongs to the current test run.
