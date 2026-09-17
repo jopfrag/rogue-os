@@ -12,5 +12,5 @@ echo "make ${target}: not implemented yet" >&2
 if [[ -n "${missing}" ]]; then
     echo "  (depends on: ${missing})" >&2
 fi
-echo "  see docs/ for design/status and CONTRIBUTING guidance" >&2
+echo "  see Containerfile.md for build rationale and CONTRIBUTING guidance" >&2
 exit 1

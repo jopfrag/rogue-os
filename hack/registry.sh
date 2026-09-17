@@ -5,7 +5,7 @@
 # container shares the host's network namespace, the registry is reachable from test VMs
 # on the libvirt bridge at 192.168.122.1:<port>.
 #
-# Networking note (see docs/development.md): inbound TCP from the libvirt bridge to a
+# Networking note: inbound TCP from the libvirt bridge to a
 # host-bound service is blocked while the host firewall (firewalld) is running. Firewalld
 # is assumed to be stopped for this workflow.
 #

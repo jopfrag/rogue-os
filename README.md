@@ -18,8 +18,7 @@ prebuilt CachyOS bootc image, and it does **not** use `bootc-image-builder`.
 The full workflow works end-to-end: the sealed image builds, installs into a disposable VM
 via the custom installer ISO (`bootc install to-filesystem`, composefs backend + systemd-boot),
 boots from disk, is reachable over SSH, and passes the automated smoke, update and rollback
-tests. See `docs/` for design and environment documentation and `Containerfile.md` for the
-image build rationale.
+tests. See `Containerfile.md` for the image build rationale and documentation.
 
 > SSH is key-only: the harness injects an ephemeral public key at install time (a tmpfiles
 > drop-in placed in the composefs deployment's per-deployment `/etc`), so no password is baked
@@ -29,8 +28,7 @@ image build rationale.
 
 - A Linux host with KVM, QEMU and libvirt, reachable from the development environment.
 - `podman`, `virsh`, `virt-install`, `qemu-img`, `xorriso`, `git`, `make`, `curl`, `ssh`.
-- The host firewall must permit traffic from the libvirt bridge to the registry
-  (see `docs/development.md`).
+- The host firewall must permit traffic from the libvirt bridge to the registry.
 
 ## Usage
 
@@ -62,7 +60,6 @@ Containerfile        CachyOS bootc image build (sealed: composefs + UKI + system
 Containerfile.md     explanation of the Containerfile (the comments live here)
 Containerfile.uki    read-only reference for the UKI/composefs build (do not modify)
 Makefile             agent/developer entry points
-docs/                design and environment documentation
 installer/           installer environment build + installation logic
 tests/image/         VM-less image validation
 tests/vm/            disposable-VM integration tests (install, boot, smoke, update, rollback)

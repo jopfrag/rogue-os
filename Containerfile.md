@@ -4,8 +4,6 @@ This document explains the `Containerfile` that builds the sealed CachyOS bootc 
 The `Containerfile` itself is kept deliberately free of comments; the rationale for each
 step lives here.
 
-- Architecture and decisions: `docs/design.md`
-- Verified environment facts: `docs/development.md`
 - Third-party attribution: `contrib/ATTRIBUTION.md`
 
 ## Overview
@@ -93,9 +91,9 @@ reviewable local patch that adds `f2fs` as an install filesystem. Upstream bootc
 `Unknown filesystem: f2fs` (or *"does not support fs-verity"*). The patch adds an `F2fs`
 variant, the `"f2fs"` parse arm, `F2fs` in `supports_fsverity()`, and the corresponding
 exhaustiveness arm in `baseline.rs`. It applies cleanly to the pinned bootc commit; it must
-be re-checked when `BOOTC_VERSION`/`BOOTC_COMMIT` are bumped. See `docs/design.md` →
-"f2fs is the default sealed root" for the full investigation and the end-to-end verification
-(install, sealed boot, `bootc switch` update, and `bootc rollback` all pass).
+be re-checked when `BOOTC_VERSION`/`BOOTC_COMMIT` are bumped. See the full f2fs
+investigation and end-to-end verification results in this document's "Default root
+filesystem" section below.
 
 `make bin` builds the binary, `make install` installs the systemd units, dracut module, and
 baseimage reference content into `/output`, which later stages copy from.
@@ -147,7 +145,7 @@ module, and baseimage reference content built in stage 1.
 `bootc install` and for external installers that consult
 `bootc install print-configuration`. The composefs backend enforces fs-verity on a sealed
 UKI, so the root filesystem must support it. **f2fs** is used (not ext4): it supports
-fs-verity, and the sealed install on f2fs is verified end-to-end (see `docs/design.md`).
+fs-verity, and the sealed install on f2fs is verified end-to-end.
 Because f2fs is a loadable module, it is forced into the initramfs via the dracut
 `add_drivers` line below.
 

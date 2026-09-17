@@ -4,7 +4,7 @@
 # Sourced by test/helper scripts. Every VM created here is uniquely named and tracked so
 # cleanup only ever touches VMs owned by the current run.
 #
-# Environment facts this relies on (see docs/development.md):
+# Environment facts this relies on:
 #   - libvirt is reached with `qemu:///system`
 #   - QEMU runs as host uid 107, so disks live under host /var/tmp (<repo>/run mapping)
 #   - test domains MUST use <cpu mode='host-passthrough'> (CachyOS v3 needs AVX2)
