@@ -146,7 +146,7 @@ umount /mnt/target
 
 ## Secure Boot
 
-The `db_key` build secret and the vendored `build/secureboot/db.crt` sign every image. The
+The `db_key` build secret and the vendored `build/db.crt` sign every image. The
 pre-made `PK.auth`/`KEK.auth`/`db.auth` enrollment material is vendored in
 `root/usr/lib/bootc/install/secureboot-keys/auto/`; the build embeds it and bootc copies it
 to `<ESP>/loader/keys/auto/` during install.
