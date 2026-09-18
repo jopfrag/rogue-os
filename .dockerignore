@@ -4,6 +4,4 @@
 .github
 .gitignore
 .dockerignore
-.pi
 *.md
-*.html
