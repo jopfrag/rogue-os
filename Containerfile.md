@@ -145,8 +145,11 @@ Beyond the base system, the packages are:
   `--build-arg TEST_PKGS=bubblewrap`. The default is empty, so production images do not
   ship `bubblewrap`.
 - `efibootmgr` — used by `bootctl` to manage EFI boot variables during install.
-- `nftables` — firewall. `nftables.service` is enabled with the package's default
-  `/etc/nftables.conf` (`drop` policy; allows loopback, established/related, ICMP, SSH).
+- `nftables` — netfilter userspace tools (a `podman`/netavark dependency). The package's
+  stock `/etc/nftables.conf` is left in place, but `nftables.service` is **not** enabled:
+  its default-drop `forward` chain blocks rootful container egress and its input chain has
+  no container-bridge rule (container→host DNS). The image therefore ships without an
+  active host firewall.
 - `smartmontools` + `sysstat` + `lm_sensors` — health telemetry for a headless server. The
   `smartd` and `sysstat` services are enabled (sysstat pulls in its collect/summary/rotate
   timers); `lm_sensors` is installed but its service is left off because it needs a
@@ -249,7 +252,6 @@ bakes into the UKI:
 - `bootc-fetch-apply-updates.timer` + `bootc-auto-reboot.timer` — unattended updates and
   maintenance-window reboots (see "Unattended updates and reboots").
 - `fstrim.timer` — periodic TRIM for the f2fs root.
-- `nftables.service` — the firewall described above.
 - `smartd.service`, `sysstat.service`, `irqbalance.service` — telemetry and IRQ balancing.
 - `ansible-pull.timer` — periodic pull-based configuration (see "ansible-pull").
 - `systemd-firstboot.service` is **masked** to avoid first-boot interactive prompts.
@@ -303,8 +305,10 @@ repository) stay disjoint from it.
 The image targets unattended servers, not a desktop:
 
 - The default target is `multi-user.target`; there is no graphical stack.
-- `nftables.service` is enabled with the package's default `/etc/nftables.conf`: input
-  policy `drop`, allowing loopback, established/related, ICMP and SSH.
+- `nftables.service` is **not** enabled. The package's stock `/etc/nftables.conf` is kept
+  but unloaded: its `forward` chain is an empty `policy drop` (no rootful container egress)
+  and its input chain has no container-bridge rule (no container→host DNS). The image
+  therefore ships without an active host firewall.
 - SMART (`smartd.service`) and system activity (`sysstat.service`) monitoring are enabled.
   `lm_sensors` is installed, but its service is not enabled because it requires a
   machine-specific `sensors-detect` run first.

@@ -101,7 +101,6 @@ RUN systemctl enable systemd-networkd systemd-resolved systemd-timesyncd sshd \
         bootc-fetch-apply-updates.timer \
         bootc-auto-reboot.timer \
         fstrim.timer \
-        nftables.service \
         smartd.service \
         sysstat.service \
         irqbalance.service \
