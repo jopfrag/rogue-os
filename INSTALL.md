@@ -28,7 +28,7 @@ mount "${scratch}" /var/lib/containers
 mkdir -p /var/lib/containers/tmp
 export TMPDIR=/var/lib/containers/tmp
 
-pacman -Sy --needed podman
+pacman -Syu --needed podman
 ```
 
 ## 3. Target disk
