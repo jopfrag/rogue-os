@@ -92,6 +92,10 @@ COPY --from=bootc-builder /output /
 
 COPY root /
 
+RUN systemd-sysusers /usr/lib/sysusers.d/containers.conf \
+    && printf 'containers:100000:65536\n' >> /etc/subuid \
+    && printf 'containers:100000:65536\n' >> /etc/subgid
+
 RUN systemctl enable systemd-networkd systemd-resolved systemd-timesyncd sshd \
         systemd-boot-update.service \
         bootc-fetch-apply-updates.timer \

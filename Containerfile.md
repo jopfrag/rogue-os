@@ -285,6 +285,19 @@ collections belong in `/var/lib/ansible/collections` (`ANSIBLE_COLLECTIONS_PATH`
 `/etc/machine-id` is set to `uninitialized` (generated on first boot) and the timezone is set
 to UTC so nothing prompts.
 
+### `containers` user and subuid/subgid
+
+The image ships a `containers` system user, declared in
+`/usr/lib/sysusers.d/containers.conf` and materialized at build time with
+`systemd-sysusers` (the `sysusers.d` declaration keeps `bootc container lint` clean).
+`/etc/subuid` and `/etc/subgid` get the reserved range `containers:100000:65536`.
+Podman's
+`--userns=auto` (and Quadlet `UserNS=auto`) defaults to the `containers` user for its
+user-namespace mapping; without the user and range, `podman pod create --userns auto`
+fails with *"Cannot find mappings for user containers: no subuid ranges found"*. The
+range is reserved here once so service-specific ranges (added by the ansible-pull
+repository) stay disjoint from it.
+
 ### Headless server defaults
 
 The image targets unattended servers, not a desktop:
