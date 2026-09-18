@@ -40,6 +40,9 @@ node scripts/md2html.cjs [input.md] [output.html]
 - Markdown is parsed at build time with the vendored `marked`
   (`assets/marked.umd.js`, MIT; see `assets/marked.LICENSE`). The generated HTML
   has **no** runtime dependency on it.
+- GitHub-style alerts (`> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`,
+  `> [!CAUTION]`) render as color-coded callouts; unknown alert types render as a
+  neutral callout. They stay plain blockquotes on GitHub.
 - Copy buttons use `navigator.clipboard` and fall back to a hidden
   `document.execCommand('copy')` textarea, so copying works from `file://`.
 - The page supports light and dark color schemes automatically.

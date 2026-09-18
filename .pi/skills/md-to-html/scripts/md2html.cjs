@@ -14,6 +14,44 @@ const path = require('path');
 const markedModule = require(path.join(__dirname, '..', 'assets', 'marked.umd.js'));
 const marked = markedModule.marked || markedModule;
 
+// GitHub-style alerts (`> [!NOTE]`, `> [!TIP]`, `> [!IMPORTANT]`, `> [!WARNING]`,
+// `> [!CAUTION]`) are rendered as colored callouts. Unknown types fall back to a
+// neutral callout, so the syntax can be reused for environment labels.
+const ALERT_TITLES = {
+    NOTE: 'Note',
+    TIP: 'Tip',
+    IMPORTANT: 'Important',
+    WARNING: 'Warning',
+    CAUTION: 'Caution',
+};
+
+marked.use({
+    renderer: {
+        blockquote({ tokens }) {
+            const body = this.parser.parse(tokens);
+            const first = tokens[0];
+            let type = null;
+            if (first && first.type === 'paragraph' && first.text) {
+                const match = first.text.match(/^\[!([A-Za-z][\w-]*)\]\s*/);
+                if (match) type = match[1].toUpperCase();
+            }
+            if (!type) {
+                return `<blockquote>\n${body}</blockquote>\n`;
+            }
+            const title =
+                ALERT_TITLES[type] ||
+                type.replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+            const inner = body.replace(new RegExp(`\\[!${type}\\]\\s*`), '');
+            return (
+                `<div class="callout callout-${type.toLowerCase()}">` +
+                `<p class="callout-title">${escapeHtml(title)}</p>` +
+                `<div class="callout-body">${inner}</div>` +
+                '</div>\n'
+            );
+        },
+    },
+});
+
 function escapeHtml(value) {
     return String(value)
         .replace(/&/g, '&amp;')
@@ -90,6 +128,25 @@ blockquote {
     background: #f6f8fa;
     border-radius: 0 6px 6px 0;
 }
+.callout {
+    margin: 1em 0;
+    padding: .75rem 1rem;
+    border-left: .25rem solid var(--callout-color, #57606a);
+    border-radius: 6px;
+    background: var(--callout-bg, #f6f8fa);
+}
+.callout-title {
+    margin: 0 0 .35em;
+    font-weight: 600;
+    color: var(--callout-color, #57606a);
+}
+.callout-body > :first-child { margin-top: 0; }
+.callout-body > :last-child { margin-bottom: 0; }
+.callout-note      { --callout-color: #0969da; --callout-bg: rgba(9, 105, 218, .08); }
+.callout-tip       { --callout-color: #1a7f37; --callout-bg: rgba(26, 127, 55, .08); }
+.callout-important { --callout-color: #8250df; --callout-bg: rgba(130, 80, 223, .08); }
+.callout-warning   { --callout-color: #9a6700; --callout-bg: rgba(154, 103, 0, .08); }
+.callout-caution   { --callout-color: #cf222e; --callout-bg: rgba(207, 34, 46, .08); }
 hr { border: 0; border-top: 1px solid #d8dee4; margin: 2em 0; }
 table { border-collapse: collapse; margin: 1em 0; }
 th, td { border: 1px solid #d0d7de; padding: .4em .7em; text-align: left; }
@@ -151,6 +208,11 @@ th { background: #f6f8fa; }
     a { color: #4493f8; }
     code { background: #21262d; }
     blockquote { color: #9198a1; background: #161b22; border-color: #30363d; }
+    .callout-note      { --callout-color: #4493f8; --callout-bg: rgba(56, 139, 253, .15); }
+    .callout-tip       { --callout-color: #3fb950; --callout-bg: rgba(63, 185, 80, .15); }
+    .callout-important { --callout-color: #ab7df8; --callout-bg: rgba(163, 113, 247, .15); }
+    .callout-warning   { --callout-color: #d29922; --callout-bg: rgba(187, 128, 9, .15); }
+    .callout-caution   { --callout-color: #f85149; --callout-bg: rgba(248, 81, 73, .15); }
     th, td { border-color: #30363d; }
     th { background: #21262d; }
     .code-block { border-color: #30363d; background: #0d1117; }
