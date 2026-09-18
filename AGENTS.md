@@ -173,10 +173,11 @@ The intended architecture for this project is fixed and recorded here. In partic
 - the CachyOS bootc image uses the composefs backend;
 - it boots via systemd-boot with a Unified Kernel Image (UKI);
 - the image is sealed (fs-verity enforced);
-- Secure Boot is always on: the build requires the documented signing secrets and signs the
-  UKI and `systemd-boot` and embeds TPM2 PCR policy material; the
-  PK/KEK/db enrollment files live in
-  `root/usr/lib/bootc/install/secureboot-keys/auto/` (only public certificates);
+- Secure Boot is always on: the build requires the `db_key` and `pcr_key` BuildKit secrets,
+  signs the UKI and `systemd-boot`, and embeds TPM2 PCR policy material; the public db
+  certificate and PCR public key live in `build/secureboot/`, and the PK/KEK/db enrollment
+  files live in `root/usr/lib/bootc/install/secureboot-keys/auto/` (only public
+  certificates);
 - bootupd must not be present in the image (its presence would select the GRUB/bootupd path instead of systemd-boot).
 
 Changing any of these requires the same investigate -> verify -> record process, and an explicit documentation update. Do not change them silently.
