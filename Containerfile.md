@@ -196,7 +196,7 @@ the executable `/usr/libexec/bootc-auto-reboot` (mode `0755`, tracked by git).
 
 The tree provides: the bootc install filesystem config and kargs, the auto-reboot
 helper/service/timer, the composefs drop-ins for the upstream update units, the
-headless-server sysctl, the SSH hardening drop-in, the networkd config, the `resolv.conf`
+SSH hardening drop-in, the networkd config, the `resolv.conf`
 and `/var` tmpfiles, the composefs `setup-root-conf.toml`, the dracut config, and
 `prepare-root.conf`.
 
@@ -290,11 +290,6 @@ to UTC so nothing prompts.
 The image targets unattended servers, not a desktop:
 
 - The default target is `multi-user.target`; there is no graphical stack.
-- `/usr/lib/sysctl.d/90-headless-server.conf` sets `kernel.panic = 10` and
-  `kernel.panic_on_oops = 1`, so a crashed kernel reboots instead of hanging until someone
-  reaches the machine. systemd-boot has no boot-count fallback for UKIs, so a kernel that
-  oopses on every boot would loop; drop `kernel.panic_on_oops` if that trade-off is not
-  wanted.
 - `nftables.service` is enabled with the package's default `/etc/nftables.conf`: input
   policy `drop`, allowing loopback, established/related, ICMP and SSH.
 - SMART (`smartd.service`) and system activity (`sysstat.service`) monitoring are enabled.
