@@ -114,7 +114,7 @@ umount /mnt/target
 
 ## Optional: Secure Boot
 
-Requires an image built with the `secureboot_key`/`secureboot_cert` secrets. The build
+Requires an image built with the `db_key`/`db_cert` secrets. The build
 embeds the `PK.auth`/`KEK.auth`/`db.auth` enrollment material; bootc copies it to
 `<ESP>/loader/keys/auto/` during install.
 

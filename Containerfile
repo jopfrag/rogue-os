@@ -93,29 +93,17 @@ COPY --from=bootc-builder /output /
 
 COPY root /
 
-RUN --mount=type=secret,id=secureboot_key \
-    --mount=type=secret,id=secureboot_cert \
+RUN --mount=type=secret,id=db_key \
+    --mount=type=secret,id=db_cert \
     sh -c 'set -euo pipefail; \
-      if [[ -f /run/secrets/secureboot_key && -f /run/secrets/secureboot_cert ]]; then \
-        pacman -S --noconfirm --needed sbsigntools efitools; \
-        sbsign \
-          --key /run/secrets/secureboot_key \
-          --cert /run/secrets/secureboot_cert \
+      if [[ -f /run/secrets/db_key && -f /run/secrets/db_cert ]]; then \
+        pacman -S --noconfirm --needed sbsigntools; \
+        sbsign --key /run/secrets/db_key --cert /run/secrets/db_cert \
           --output /tmp/systemd-bootx64.efi \
           /usr/lib/systemd/boot/efi/systemd-bootx64.efi; \
         install -m 0644 /tmp/systemd-bootx64.efi /usr/lib/systemd/boot/efi/systemd-bootx64.efi; \
         rm -f /tmp/systemd-bootx64.efi; \
-        install -d /usr/lib/bootc/install/secureboot-keys/auto; \
-        for v in PK KEK db; do \
-          cert-to-efi-sig-list /run/secrets/secureboot_cert "/tmp/${v}.esl"; \
-          sign-efi-sig-list -t "2026-01-01 00:00:00" \
-            -c /run/secrets/secureboot_cert \
-            -k /run/secrets/secureboot_key \
-            "${v}" "/tmp/${v}.esl" "/tmp/${v}.auth"; \
-          install -m 0644 "/tmp/${v}.auth" "/usr/lib/bootc/install/secureboot-keys/auto/${v}.auth"; \
-          rm -f "/tmp/${v}.esl" "/tmp/${v}.auth"; \
-        done; \
-        pacman -Rns --noconfirm sbsigntools efitools; \
+        pacman -Rns --noconfirm sbsigntools; \
       fi'
 
 RUN systemd-sysusers /usr/lib/sysusers.d/containers.conf \
@@ -188,11 +176,11 @@ COPY --from=bootc-builder /output/usr/bin/bootc /usr/bin/bootc
 
 RUN --mount=type=bind,from=split,target=/target \
     --mount=type=bind,from=split,source=/kernel,target=/kernel \
-    --mount=type=secret,id=secureboot_key \
-    --mount=type=secret,id=secureboot_cert \
+    --mount=type=secret,id=db_key \
+    --mount=type=secret,id=db_cert \
     --mount=type=secret,id=pcr_key \
     --mount=type=secret,id=pcr_pub \
-    sh -c 'set -euo pipefail; kver="$(ls /kernel)"; install -d /out/uki; args=""; if [[ -f /run/secrets/secureboot_key && -f /run/secrets/secureboot_cert ]]; then args="${args} --signtool sbsign --secureboot-private-key /run/secrets/secureboot_key --secureboot-certificate /run/secrets/secureboot_cert"; fi; if [[ -f /run/secrets/pcr_key && -f /run/secrets/pcr_pub ]]; then args="${args} --pcr-private-key /run/secrets/pcr_key --pcr-public-key /run/secrets/pcr_pub"; fi; bootc container ukify --rootfs /target --kernel-dir "/kernel/${kver}" -- ${args} --output "/out/uki/${kver}.efi"'
+    sh -c 'set -euo pipefail; kver="$(ls /kernel)"; install -d /out/uki; args=""; if [[ -f /run/secrets/db_key && -f /run/secrets/db_cert ]]; then args="${args} --signtool sbsign --secureboot-private-key /run/secrets/db_key --secureboot-certificate /run/secrets/db_cert"; fi; if [[ -f /run/secrets/pcr_key && -f /run/secrets/pcr_pub ]]; then args="${args} --pcr-private-key /run/secrets/pcr_key --pcr-public-key /run/secrets/pcr_pub"; fi; bootc container ukify --rootfs /target --kernel-dir "/kernel/${kver}" -- ${args} --output "/out/uki/${kver}.efi"'
 
 # ---------------------------------------------------------------------------
 

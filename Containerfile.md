@@ -62,10 +62,15 @@ Signing is opt-in via Podman build secrets. A plain `podman build` produces the 
 image; supplying secrets produces a signed one. See "Disk encryption and Secure Boot" below
 for the full rationale.
 
-- `secureboot_key` / `secureboot_cert` — Secure Boot private key and certificate (PEM).
-  Used to sign both the UKI (in `sealed-uki`) and `systemd-boot` (in `rootfs`).
+- `db_key` / `db_cert` — db private key and certificate (PEM). Signs `systemd-boot` (in
+  `rootfs`) and the UKI (in `sealed-uki`).
 - `pcr_key` / `pcr_pub` — PCR-policy private key and matching public key (PEM). Used by
   `ukify` to embed the `.pcrsig`/`.pcrpkey` sections.
+
+The Secure Boot enrollment material (`PK.auth`, `KEK.auth`, `db.auth`) is **not** generated
+at build time. Instead, pre-made `.auth` files are committed to the repository under
+`root/usr/lib/bootc/install/secureboot-keys/auto/` and copied into the image via the
+existing `COPY root /`. Regenerate them when the keys change.
 
 Because BuildKit does not fold secret contents into the layer cache key, a signed build
 should be run with `--no-cache` (or a bumped build arg) to avoid reusing a stale unsigned
@@ -73,8 +78,8 @@ layer:
 
 ```sh
 podman build --no-cache \
-  --secret id=secureboot_key,src=./sb.key \
-  --secret id=secureboot_cert,src=./sb.crt \
+  --secret id=db_key,src=./db.key \
+  --secret id=db_cert,src=./db.crt \
   --secret id=pcr_key,src=./pcr.key \
   --secret id=pcr_pub,src=./pcr.pub \
   -t ghcr.io/jopfrag/rogue:latest -f Containerfile .
@@ -559,20 +564,15 @@ the composefs digest; it is therefore signed in the `rootfs` stage, **before**
 would make the digest and the on-disk rootfs disagree and fail fs-verity verification. The
 `sbsigntools` package is installed only for the duration of that step and removed again.
 
-Enrolling the certificate into the target firmware is the last mile. When the Secure Boot
-secrets are supplied, the same `rootfs` step generates the EFI authenticated variable
-updates the firmware needs:
+Enrolling the certificate into the target firmware is the last mile. The Secure Boot
+enrollment material — `PK.auth`, `KEK.auth` and `db.auth` — is pre-made outside the build
+and committed to the repository under `root/usr/lib/bootc/install/secureboot-keys/auto/`.
+`COPY root /` places them in the image, and bootc copies them to `<ESP>/loader/keys/auto/`
+at install time. `systemd-boot` then offers a one-time enrollment entry in its boot menu.
+The firmware must be in **Setup Mode** for the authenticated writes to succeed.
 
-- `cert-to-efi-sig-list` and `sign-efi-sig-list` (from `efitools`) turn the single
-  `secureboot_key`/`secureboot_cert` keypair into `PK.auth`, `KEK.auth` and `db.auth`. A
-  fixed timestamp keeps the output reproducible.
-- They are installed at `/usr/lib/bootc/install/secureboot-keys/auto/`, from where bootc
-  copies them to `<ESP>/loader/keys/auto/` at install time.
-- `systemd-boot` then offers a one-time enrollment entry in its boot menu. The firmware must
-  be in **Setup Mode** for the authenticated writes to succeed.
-
-No Microsoft certificates are included; `db` contains only this image's certificate. As
-above, `efitools` and `sbsigntools` exist only for the duration of the build step.
+The `.auth` files contain only public certificates (signed auth structures); no private
+keys are in the image. Regenerate them with `efitools` when the key material changes.
 
 ### Boot loader configuration
 
