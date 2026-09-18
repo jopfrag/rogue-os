@@ -34,9 +34,33 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y podman
 
+      - name: Prepare signing secrets
+        env:
+          DB_KEY: ${{ secrets.DB_KEY }}
+          DB_CERT: ${{ secrets.DB_CERT }}
+          PCR_KEY: ${{ secrets.PCR_KEY }}
+          PCR_PUB: ${{ secrets.PCR_PUB }}
+        run: |
+          if [ -z "${DB_KEY}" ] || [ -z "${DB_CERT}" ] || [ -z "${PCR_KEY}" ] || [ -z "${PCR_PUB}" ]; then
+            echo "::error::The build always signs for Secure Boot and embeds a TPM2 PCR policy; repository secrets DB_KEY, DB_CERT, PCR_KEY and PCR_PUB are required."
+            exit 1
+          fi
+          secrets="${RUNNER_TEMP}/signing"
+          install -d -m 0700 "${secrets}"
+          printf '%s\n' "${DB_KEY}"  > "${secrets}/db.key"
+          printf '%s\n' "${DB_CERT}" > "${secrets}/db.crt"
+          printf '%s\n' "${PCR_KEY}" > "${secrets}/pcr.key"
+          printf '%s\n' "${PCR_PUB}" > "${secrets}/pcr.pub"
+          chmod 0600 "${secrets}"/*
+
       - name: Build image
         run: |
           podman build \
+            --build-arg SIGNING_REV="${GITHUB_SHA}" \
+            --secret id=db_key,src="${RUNNER_TEMP}/signing/db.key" \
+            --secret id=db_cert,src="${RUNNER_TEMP}/signing/db.crt" \
+            --secret id=pcr_key,src="${RUNNER_TEMP}/signing/pcr.key" \
+            --secret id=pcr_pub,src="${RUNNER_TEMP}/signing/pcr.pub" \
             --tag "${IMAGE_NAME}:${IMAGE_TAG}" \
             --tag "${IMAGE_NAME}:latest" \
             -f Containerfile .

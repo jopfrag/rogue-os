@@ -3,7 +3,6 @@ ARG BOOTC_COMMIT=fa0d3f9cb9a0ce3b4d1dc2607a0bf5e31b822f60
 ARG CACHYOS_MIRROR=""
 ARG KERNEL_PKGS="linux-cachyos-server-lto"
 ARG FIRMWARE_PKGS="linux-firmware amd-ucode"
-ARG TEST_PKGS=""
 ARG CACHYOS_BASE="docker.io/cachyos/cachyos-v3:latest"
 
 FROM ${CACHYOS_BASE} AS cachyos-base
@@ -53,7 +52,6 @@ FROM cachyos-base AS rootfs
 
 ARG KERNEL_PKGS
 ARG FIRMWARE_PKGS
-ARG TEST_PKGS
 ARG SIGNING_REV=0
 
 RUN pacman -Syu --noconfirm --needed \
@@ -69,7 +67,6 @@ RUN pacman -Syu --noconfirm --needed \
         dbus dbus-glib glib2 shadow \
         openssh \
         ansible-core \
-        ${TEST_PKGS} \
         efibootmgr \
         nftables \
         smartmontools sysstat lm_sensors irqbalance \
@@ -97,15 +94,15 @@ COPY root /
 
 RUN --mount=type=secret,id=db_key \
     --mount=type=secret,id=db_cert \
-    sh -c 'if [[ -f /run/secrets/db_key && -f /run/secrets/db_cert ]]; then \
-        pacman -Syu --noconfirm --needed sbsigntools \
-        && sbsign --key /run/secrets/db_key --cert /run/secrets/db_cert \
-             --output /tmp/systemd-bootx64.efi \
-             /usr/lib/systemd/boot/efi/systemd-bootx64.efi \
-        && install -m 0644 /tmp/systemd-bootx64.efi /usr/lib/systemd/boot/efi/systemd-bootx64.efi \
-        && rm -f /tmp/systemd-bootx64.efi \
-        && pacman -Rns --noconfirm sbsigntools; \
-      fi'
+    sh -c 'test -f /run/secrets/db_key && test -f /run/secrets/db_cert \
+        || { echo "error: db_key and db_cert build secrets are required" >&2; exit 1; }; \
+      pacman -Syu --noconfirm --needed sbsigntools \
+      && sbsign --key /run/secrets/db_key --cert /run/secrets/db_cert \
+           --output /tmp/systemd-bootx64.efi \
+           /usr/lib/systemd/boot/efi/systemd-bootx64.efi \
+      && install -m 0644 /tmp/systemd-bootx64.efi /usr/lib/systemd/boot/efi/systemd-bootx64.efi \
+      && rm -f /tmp/systemd-bootx64.efi \
+      && pacman -Rns --noconfirm sbsigntools'
 
 RUN systemd-sysusers /usr/lib/sysusers.d/containers.conf \
     && printf 'containers:100000:65536\n' >> /etc/subuid \
@@ -183,7 +180,18 @@ RUN --mount=type=bind,from=split,target=/target \
     --mount=type=secret,id=db_cert \
     --mount=type=secret,id=pcr_key \
     --mount=type=secret,id=pcr_pub \
-    sh -c 'kver="$(ls /kernel)"; install -d /out/uki; args=""; if [[ -f /run/secrets/db_key && -f /run/secrets/db_cert ]]; then pacman -Syu --noconfirm --needed sbsigntools && args="${args} --signtool sbsign --secureboot-private-key /run/secrets/db_key --secureboot-certificate /run/secrets/db_cert" || exit 1; fi; if [[ -f /run/secrets/pcr_key && -f /run/secrets/pcr_pub ]]; then args="${args} --pcr-private-key /run/secrets/pcr_key --pcr-public-key /run/secrets/pcr_pub"; fi; bootc container ukify --rootfs /target --kernel-dir "/kernel/${kver}" -- ${args} --output "/out/uki/${kver}.efi"'
+    sh -c 'test -f /run/secrets/db_key && test -f /run/secrets/db_cert \
+          && test -f /run/secrets/pcr_key && test -f /run/secrets/pcr_pub \
+        || { echo "error: db_key, db_cert, pcr_key and pcr_pub build secrets are required" >&2; exit 1; }; \
+      kver="$(ls /kernel)"; install -d /out/uki; \
+      pacman -Syu --noconfirm --needed sbsigntools \
+      && bootc container ukify --rootfs /target --kernel-dir "/kernel/${kver}" -- \
+           --signtool sbsign \
+           --secureboot-private-key /run/secrets/db_key \
+           --secureboot-certificate /run/secrets/db_cert \
+           --pcr-private-key /run/secrets/pcr_key \
+           --pcr-public-key /run/secrets/pcr_pub \
+           --output "/out/uki/${kver}.efi"'
 
 # ---------------------------------------------------------------------------
 

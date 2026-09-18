@@ -13,10 +13,10 @@ whenever the key material changes. The db.auth certificate must match the
 db_cert supplied to the build; if they diverge the signed image is unbootable.
 
 This README (and any other non-*.auth file here) is ignored by bootc and is
-never copied to the ESP. It exists only to keep the auto/ directory in git so
-that an unsigned build still ships the enrolment path. An auto/ directory with
-no .auth files means the build produces an image with no enrolment material
-(unsigned fallback).
+never copied to the ESP. It exists only to keep the auto/ directory in git. An
+auto/ directory with no .auth files means the image ships no enrolment material;
+because the build always signs, the image can then only be booted if the
+firmware already trusts the build's db certificate.
 
 Do NOT add plain files directly under secureboot-keys/: bootc requires every
 entry there to be a directory (each one is a key set), and fails

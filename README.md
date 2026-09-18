@@ -5,9 +5,9 @@
 
 A **sealed CachyOS bootc image**: a composefs root protected by fs-verity, booted from a
 Unified Kernel Image via **systemd-boot**. The default root filesystem is **f2fs**. The UKI
-and `systemd-boot` can be signed for **Secure Boot**, and a LUKS root can be auto-unlocked
-with a **TPM2 signed PCR policy** that is also bound to the Secure Boot policy (PCR 7); both
-are opt-in at build time.
+and `systemd-boot` are always signed for **Secure Boot**, and the UKI always carries a
+**TPM2 signed PCR policy** so a LUKS root can be auto-unlocked once it is bound to the TPM
+and the Secure Boot policy (PCR 7). The signing keys are supplied as build secrets.
 
 ## Get the image
 
@@ -15,22 +15,24 @@ are opt-in at build time.
 podman pull ghcr.io/jopfrag/rogue:latest
 ```
 
-Or build it yourself:
+Or build it yourself. Signing is mandatory, so the four key secrets below are required:
 
 ```sh
-podman build -t ghcr.io/jopfrag/rogue:latest -f Containerfile .
+podman build \
+  --build-arg SIGNING_REV="$(date +%s)" \
+  --secret id=db_key,src=./db.key \
+  --secret id=db_cert,src=./db.crt \
+  --secret id=pcr_key,src=./pcr.key \
+  --secret id=pcr_pub,src=./pcr.pub \
+  -t ghcr.io/jopfrag/rogue:latest -f Containerfile .
 ```
-
-For a local build-and-boot loop, the [`Justfile`](Justfile) builds the image and installs
-and boots it in a disposable libvirt VM (`just`).
 
 ## Install
 
-UEFI only. **Secure Boot is optional**: an unsigned build requires it to be disabled; a
-build signed with the `db_key`/`db_cert` (and optionally `pcr_key`/`pcr_pub`) secrets works
-with Secure Boot once the certificate is enrolled. Boot a live Arch Linux environment in
-UEFI mode, prepare the target disk (GPT with an EFI system partition and an f2fs root),
-then install the image:
+UEFI only. The image is always signed for Secure Boot and always carries a TPM2 PCR policy,
+so Secure Boot must be enabled after enrolling the certificate. Boot a live Arch Linux
+environment in UEFI mode, prepare the target disk (GPT with an EFI system partition and a
+LUKS2-encrypted f2fs root), then install the image:
 
 ```sh
 podman run --rm --privileged --pid=host --ipc=host \
@@ -59,8 +61,8 @@ bootc status                                   # bootType: Uki, bootloader: syst
 
 ## Requirements
 
-- x86-64-v3 (AVX2) machine, UEFI boot. Secure Boot is optional (it must be disabled for an
-  unsigned build).
+- x86-64-v3 (AVX2) machine, UEFI boot, Secure Boot capable, with a TPM2 device. Secure
+  Boot must be enabled once the image's certificate is enrolled.
 - A target disk (it will be wiped).
 
 ## Documentation

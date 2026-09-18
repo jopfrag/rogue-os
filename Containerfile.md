@@ -13,9 +13,9 @@ The image is **sealed**:
 - the kernel is packaged as a **Unified Kernel Image (UKI)** that carries the composefs
   digest on its kernel command line;
 - **fs-verity enforcement is on**;
-- the UKI and `systemd-boot` are **signed for Secure Boot when signing keys are supplied at
-  build time**, and the UKI carries a **signed TPM2 PCR policy** for disk-encryption
-  unlock; without keys the build produces an unsigned UKI and Secure Boot is not used;
+- the UKI and `systemd-boot` are **always signed for Secure Boot** (the signing secrets are
+  required), and the UKI always carries a **signed TPM2 PCR policy** for disk-encryption
+  unlock;
 - the bootloader is **systemd-boot** and **bootupd is deliberately not installed** (bootc
   selects systemd-boot when bootupd is absent; installing bootupd would select the
   ostree/GRUB path instead).
@@ -29,8 +29,8 @@ fixup, so it is not repeated per stage), the build has five stages:
 1. **bootc-builder** — compile the `bootc` binary from source.
 2. **rootfs** — CachyOS base + kernel/initramfs/systemd, laid out per bootc.
 3. **split** — `bootc container split-kernel-and-rootfs` (kernel out of the rootfs).
-4. **sealed-uki** — `bootc container ukify` builds the UKI, optionally signing it for
-   Secure Boot and with a TPM2 PCR policy.
+4. **sealed-uki** — `bootc container ukify` builds the UKI, signing it for Secure Boot
+   and with a TPM2 PCR policy.
 5. **final** — the split rootfs plus the UKI at `/boot/EFI/Linux/<kver>.efi`.
 
 References: the upstream bootc image requirements (`bootc-dev/bootc`,
@@ -52,22 +52,18 @@ References: the upstream bootc image requirements (`bootc-dev/bootc`,
 - `FIRMWARE_PKGS` — firmware packages. The default is `linux-firmware amd-ucode`: the full
   firmware set (so the image is not tied to one machine's GPU/NIC) plus AMD CPU microcode.
   Override with `--build-arg` (e.g. `intel-ucode`) for a different CPU vendor.
-- `TEST_PKGS` — test-only packages. Defaults to empty; `bcvk` needs `bubblewrap` inside the
-  image, so the `Justfile` passes `--build-arg TEST_PKGS=bubblewrap`, while production
-  builds leave it empty and ship without `bwrap`.
 - `CACHYOS_BASE` — base image reference; defaults to
   `docker.io/cachyos/cachyos-v3:latest`. Pin it to a tag or digest for a fully reproducible
   build (bootc is already pinned by `BOOTC_VERSION`/`BOOTC_COMMIT`).
 - `SIGNING_REV` — cache-buster for the two secret-consuming signing steps (declared per
   stage, default `0`). BuildKit does not include secret contents in the layer cache key, so
-  bump it when rotating keys or switching between signed and unsigned builds; see
-  "Optional signing secrets".
+  bump it when rotating keys; see "Signing secrets".
 
-## Optional signing secrets
+## Signing secrets
 
-Signing is opt-in via Podman build secrets. A plain `podman build` produces the unsigned
-image; supplying secrets produces a signed one. See "Disk encryption and Secure Boot" below
-for the full rationale.
+Signing is mandatory: the `rootfs` and `sealed-uki` stages require the secrets below and
+fail the build if any is missing. See "Disk encryption and Secure Boot" below for the full
+rationale.
 
 - `db_key` / `db_cert` — db private key and certificate (PEM). Signs `systemd-boot` (in
   `rootfs`) and the UKI (in `sealed-uki`).
@@ -77,20 +73,17 @@ for the full rationale.
 The Secure Boot enrollment material (`PK.auth`, `KEK.auth`, `db.auth`) is **not** generated
 at build time. Instead, pre-made `.auth` files are placed under
 `root/usr/lib/bootc/install/secureboot-keys/auto/` and copied into the image via the
-existing `COPY root /`. This repository ships only the placeholder `auto/README`, so an
-unsigned build carries no enrollment material; add the generated `.auth` files (public
-certificates only) before building a Secure-Boot-capable image, and regenerate them when
-the keys change.
+existing `COPY root /`. This repository ships only the placeholder `auto/README`; add the
+generated `.auth` files (public certificates only) before building an image whose own keys
+are to be enrolled, and regenerate them when the keys change.
 
 > **Consistency requirement:** `db_cert` **must match** the certificate baked into `db.auth`.
 > The firmware verifies `systemd-boot` and the UKI against the cert inside `db.auth`; if
 > `db_cert` differs, the image is signed but unbootable. Regenerate `db.auth` whenever
 > `db_key`/`db_cert` are rotated.
 
-Because BuildKit does not fold secret contents into the layer cache key, a signed build
-after an unsigned one would reuse the stale unsigned layer. Bump `SIGNING_REV` (see
-"Global build arguments") whenever the key material changes or when switching between
-signed and unsigned builds:
+Because BuildKit does not fold secret contents into the layer cache key, bump `SIGNING_REV`
+(see "Global build arguments") whenever the key material changes:
 
 ```sh
 podman build \
@@ -193,11 +186,6 @@ Beyond the base system, the packages are:
 - `ansible-core` — provides `ansible-pull` for local configuration management (see
   "ansible-pull"). The full `ansible` metapackage (collections bundle) is deliberately not
   installed.
-- `${TEST_PKGS}` — test-only packages. `bcvk` (the rootless test tool) re-execs itself
-  through a bubblewrap namespace inside a container created from this image, and refuses to
-  run if `bwrap` is absent; the `Justfile` therefore builds with
-  `--build-arg TEST_PKGS=bubblewrap`. The default is empty, so production images do not
-  ship `bubblewrap`.
 - `efibootmgr` — used by `bootctl` to manage EFI boot variables during install.
 - `nftables` — netfilter userspace tools (a `podman`/netavark dependency). The package's
   stock `/etc/nftables.conf` is left in place, but `nftables.service` is **not** enabled:
@@ -268,10 +256,8 @@ symlink, the bootc image-version marker, and the base-filesystem relayout/symlin
 `bootc install print-configuration`. The composefs backend enforces fs-verity on a sealed
 UKI, so the root filesystem must support it. **f2fs** is used (not ext4): it supports
 fs-verity, and the sealed install on f2fs is verified via the manual
-`bootc install to-filesystem` flow (see `INSTALL.md`). The rootless `bcvk to-disk` path has
-a known intermittent finalize issue.
-Because f2fs is a loadable module, it is forced into the initramfs via the dracut
-`add_drivers` line below.
+`bootc install to-filesystem` flow (see `INSTALL.md`). Because f2fs is a loadable module,
+it is forced into the initramfs via the dracut `add_drivers` line below.
 
 `bootc install` formats f2fs with `-i -O extra_attr,inode_checksum,sb_checksum,verity`
 (mkfs options, not mount options):
@@ -521,8 +507,7 @@ as well (with `ostree`).
 `kargs.d`) into the UKI command line. Sealing is left on: **`--allow-missing-verity` is not
 passed**.
 
-Everything after `--` is forwarded to `ukify` unchanged. When the signing secrets are
-supplied, the build appends:
+Everything after `--` is forwarded to `ukify` unchanged. The build always appends:
 
 - `--signtool sbsign --secureboot-private-key … --secureboot-certificate …` (from
   `sbsigntools`), signing the UKI for Secure Boot;
@@ -530,7 +515,8 @@ supplied, the build appends:
   and embed a `.pcrsig`/`.pcrpkey` **signed PCR policy** (PCR 11) so a LUKS volume can be
   bound to the image and still unlock across updates.
 
-Without the secrets the command is byte-for-byte the unsigned build.
+Without the four secrets the `sealed-uki` stage aborts, so an image is never produced
+unsigned or without a PCR policy.
 
 The `split` stage is mounted into this stage (`/target` read-write for the rootfs,
 `/kernel` for the extracted kernel) so `ukify` can read both.
@@ -556,7 +542,7 @@ recommends, disk encryption is handled independently of bootc's installer, via
 bootc's built-in `tpm2-luks`:
 
 - `ukify` embeds a `.pcrsig` (a signature over the predicted PCR 11 value) and `.pcrpkey`
-  (the matching public key) into the UKI when the PCR signing secrets are supplied.
+  (the matching public key) into the UKI (the PCR signing secrets are required).
 - `systemd-stub` copies those sections into the initrd as
   `/.extra/tpm2-pcr-signature.json` and `/.extra/tpm2-pcr-public-key.pem`, so
   `systemd-cryptsetup` can unlock the root with the TPM2 token.

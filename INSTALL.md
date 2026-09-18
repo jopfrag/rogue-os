@@ -1,8 +1,9 @@
 # Installing the sealed CachyOS bootc image from a stock Arch ISO
 
-By-hand install of `ghcr.io/jopfrag/rogue:latest`. UEFI-only; Secure Boot must be disabled
-for the default unsigned build (see "Optional: Secure Boot" below for a signed image).
-The result is sealed: composefs root with fs-verity enforced and a UKI booted by
+By-hand install of `ghcr.io/jopfrag/rogue:latest`. UEFI-only. The image is always signed
+for Secure Boot and always carries a TPM2 signed PCR policy, so Secure Boot must be enabled
+once the image's certificate is enrolled and the root is encrypted with LUKS and bound to
+the TPM. The result is sealed: composefs root with fs-verity enforced and a UKI booted by
 systemd-boot.
 
 ## Assumptions
@@ -41,6 +42,12 @@ lsblk -o NAME,SIZE,TYPE,MODEL,MOUNTPOINTS
 
 The root partition uses the DPS x86-64 root type GUID
 (<https://uapi-group.org/specifications/specs/discoverable_partitions_specification/>).
+
+> **The standard install encrypts the root with LUKS** so the TPM2 PCR policy embedded in
+> the UKI can auto-unlock it. Use the encrypted variant in "Encrypted root (LUKS + TPM2
+> auto-unlock)" below instead of the plain-root commands here. The plain-root commands
+> remain for a deliberately unencrypted install; the signed image still boots, but loses
+> TPM2 auto-unlock.
 
 ```sh
 disk=/dev/nvme0n1
@@ -113,9 +120,9 @@ mount -o remount,ro /mnt/target
 umount /mnt/target
 ```
 
-## Optional: Secure Boot
+## Secure Boot
 
-Requires an image built with the `db_key`/`db_cert` secrets and the pre-made
+`db_key`/`db_cert` are required build secrets, so every image is signed. Use the pre-made
 `PK.auth`/`KEK.auth`/`db.auth` enrollment material placed in
 `root/usr/lib/bootc/install/secureboot-keys/auto/` before the build (the upstream
 repository ships only the placeholder `auto/README`). The build embeds that material and
@@ -144,13 +151,13 @@ bootc copies it to `<ESP>/loader/keys/auto/` during install.
 > offered. Changing the Secure Boot keys, or resetting firmware, changes PCR 7, so a
 > TPM-bound LUKS token must then be re-enrolled.
 
-## Optional: encrypted root (LUKS + TPM2 auto-unlock)
+## Encrypted root (LUKS + TPM2 auto-unlock)
 
-The runbook above installs a plain f2fs root. To encrypt the root and unlock it with the
-TPM2 **signed PCR policy** embedded in a signed UKI, replace step 4. This requires an image
-built with the `pcr_key`/`pcr_pub` secrets. The TPM enrollment (below) happens on the
-**installed** system, after the Secure Boot steps above when Secure Boot is used, because the
-token records the PCR 7 value and PCR 7 encodes the Secure Boot policy.
+The image always embeds a TPM2 PCR policy, so the root is encrypted with LUKS and unlocked
+with it. Replace step 4 with the encrypted variant below. (A plain f2fs root still boots
+the signed image, but loses TPM2 auto-unlock.) The TPM enrollment (below) happens on the
+**installed** system, after the Secure Boot steps above, because the token records the
+PCR 7 value and PCR 7 encodes the Secure Boot policy.
 
 ### 4. Partition, format and mount (encrypted variant)
 
