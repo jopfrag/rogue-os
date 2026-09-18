@@ -91,13 +91,14 @@ RUN install -d /usr/lib/sysimage/pacman \
 COPY --from=bootc-builder /output /
 
 COPY root /
+COPY build/secureboot/db.crt /tmp/secureboot/db.crt
+COPY build/secureboot/pcr_pub.pem /usr/lib/bootc/tpm2/pcr_pub.pem
 
 RUN --mount=type=secret,id=db_key \
-    --mount=type=secret,id=db_cert \
-    sh -c 'test -f /run/secrets/db_key && test -f /run/secrets/db_cert \
-        || { echo "error: db_key and db_cert build secrets are required" >&2; exit 1; }; \
+    sh -c 'test -f /run/secrets/db_key \
+        || { echo "error: db_key build secret is required" >&2; exit 1; }; \
       pacman -Syu --noconfirm --needed sbsigntools \
-      && sbsign --key /run/secrets/db_key --cert /run/secrets/db_cert \
+      && sbsign --key /run/secrets/db_key --cert /tmp/secureboot/db.crt \
            --output /tmp/systemd-bootx64.efi \
            /usr/lib/systemd/boot/efi/systemd-bootx64.efi \
       && install -m 0644 /tmp/systemd-bootx64.efi /usr/lib/systemd/boot/efi/systemd-bootx64.efi \
@@ -173,24 +174,22 @@ ARG SIGNING_REV=0
 RUN pacman -Syu --noconfirm --needed systemd-ukify ostree libselinux \
     && pacman -Scc --noconfirm
 COPY --from=bootc-builder /output/usr/bin/bootc /usr/bin/bootc
+COPY build/secureboot/db.crt /tmp/secureboot/db.crt
 
 RUN --mount=type=bind,from=split,target=/target \
     --mount=type=bind,from=split,source=/kernel,target=/kernel \
     --mount=type=secret,id=db_key \
-    --mount=type=secret,id=db_cert \
     --mount=type=secret,id=pcr_key \
-    --mount=type=secret,id=pcr_pub \
-    sh -c 'test -f /run/secrets/db_key && test -f /run/secrets/db_cert \
-          && test -f /run/secrets/pcr_key && test -f /run/secrets/pcr_pub \
-        || { echo "error: db_key, db_cert, pcr_key and pcr_pub build secrets are required" >&2; exit 1; }; \
+    sh -c 'test -f /run/secrets/db_key && test -f /run/secrets/pcr_key \
+        || { echo "error: db_key and pcr_key build secrets are required" >&2; exit 1; }; \
       kver="$(ls /kernel)"; install -d /out/uki; \
       pacman -Syu --noconfirm --needed sbsigntools \
       && bootc container ukify --rootfs /target --kernel-dir "/kernel/${kver}" -- \
            --signtool sbsign \
            --secureboot-private-key /run/secrets/db_key \
-           --secureboot-certificate /run/secrets/db_cert \
+           --secureboot-certificate /tmp/secureboot/db.crt \
            --pcr-private-key /run/secrets/pcr_key \
-           --pcr-public-key /run/secrets/pcr_pub \
+           --pcr-public-key /target/usr/lib/bootc/tpm2/pcr_pub.pem \
            --output "/out/uki/${kver}.efi"'
 
 # ---------------------------------------------------------------------------

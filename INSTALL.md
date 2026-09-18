@@ -146,8 +146,8 @@ umount /mnt/target
 
 ## Secure Boot
 
-`db_key`/`db_cert` are required build secrets, so every image is signed. The pre-made
-`PK.auth`/`KEK.auth`/`db.auth` enrollment material is vendored in
+The `db_key` build secret and the vendored `build/secureboot/db.crt` sign every image. The
+pre-made `PK.auth`/`KEK.auth`/`db.auth` enrollment material is vendored in
 `root/usr/lib/bootc/install/secureboot-keys/auto/`; the build embeds it and bootc copies it
 to `<ESP>/loader/keys/auto/` during install.
 
@@ -229,14 +229,15 @@ firmware, add `--karg=luks.uuid=<UUID of ${rootfs}>` and
 The token records PCR 7, which encodes the firmware's Secure Boot policy, so enroll it from
 the **installed** system after the Secure Boot steps above (or, without Secure Boot, from a
 boot of the installed system with the firmware's Secure Boot state as it will be at boot).
-Keep `pcr_pub` available on the installed system. Enrolling a new keyslot prompts for the
-existing passphrase and leaves the passphrase keyslot in place:
+The matching public key is shipped in the image at
+`/usr/lib/bootc/tpm2/pcr_pub.pem`. Enrolling a new keyslot prompts for the existing
+passphrase and leaves the passphrase keyslot in place:
 
 ```sh
 systemd-cryptenroll \
     --tpm2-device=auto \
     --tpm2-pcrs=7:sha256 \
-    --tpm2-public-key=/path/to/pcr_pub.pem \
+    --tpm2-public-key=/usr/lib/bootc/tpm2/pcr_pub.pem \
     "${rootfs}"
 ```
 
