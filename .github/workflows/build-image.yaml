@@ -17,7 +17,6 @@ on:
 env:
   IMAGE_NAME: ghcr.io/jopfrag/rogue-server
   IMAGE_TAG: v1
-  IMAGE_SHA_TAG: ${{ github.sha }}
 
 jobs:
   build:
@@ -54,6 +53,10 @@ jobs:
           printf '%s\n' "${PCR_PUB}" > "${secrets}/pcr.pub"
           chmod 0600 "${secrets}"/*
 
+      - name: Compute image date tag
+        id: meta
+        run: echo "date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
       - name: Build image
         run: |
           podman build \
@@ -62,8 +65,8 @@ jobs:
             --secret id=db_cert,src="${RUNNER_TEMP}/signing/db.crt" \
             --secret id=pcr_key,src="${RUNNER_TEMP}/signing/pcr.key" \
             --secret id=pcr_pub,src="${RUNNER_TEMP}/signing/pcr.pub" \
+            --tag "${IMAGE_NAME}:${{ steps.meta.outputs.date }}" \
             --tag "${IMAGE_NAME}:${IMAGE_TAG}" \
-            --tag "${IMAGE_NAME}:${IMAGE_SHA_TAG}" \
             --tag "${IMAGE_NAME}:latest" \
             -f Container.server .
 
@@ -77,6 +80,6 @@ jobs:
       - name: Push image
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
+          podman push "${IMAGE_NAME}:${{ steps.meta.outputs.date }}"
           podman push "${IMAGE_NAME}:${IMAGE_TAG}"
-          podman push "${IMAGE_NAME}:${IMAGE_SHA_TAG}"
           podman push "${IMAGE_NAME}:latest"
