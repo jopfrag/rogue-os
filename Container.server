@@ -149,7 +149,7 @@ RUN pacman -Scc --noconfirm >/dev/null \
              /var/lib/krb5kdc/kdc.conf \
              /var/lib/systemd/catalog/database \
     && find /run -mindepth 1 -maxdepth 1 \
-         ! -name secrets ! -name '.containerenv' -exec rm -rf {} + \
+         ! -name '.containerenv' -exec rm -rf {} + \
     && find /tmp -mindepth 1 -maxdepth 1 -exec rm -rf {} + \
     && install -d -m 0755 /var/cache /var/log
 
