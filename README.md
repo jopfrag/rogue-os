@@ -74,9 +74,7 @@ bootc status                                   # bootType: Uki, bootloader: syst
 
 ## References
 
-The build draws on [`bootcrew/mono`](https://github.com/bootcrew/mono) (its
-`arch/Containerfile` and `shared/`), the maintained successor to
-`bootcrew/arch-bootc`, and on upstream
+The build draws on [`bootcrew/mono`](https://github.com/bootcrew/mono) and
 [`bootc`](https://github.com/bootc-dev/bootc).
 
 ## License
