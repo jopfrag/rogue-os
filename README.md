@@ -28,7 +28,7 @@ The goal is simple: **make the thing you boot the thing you intended to build.**
 
 Pull the published image with Podman:
 
-```
+```sh
 podman pull ghcr.io/jopfrag/rogue-server:v1
 ```
 
@@ -38,7 +38,7 @@ podman pull ghcr.io/jopfrag/rogue-server:v1
 
 Installation from a stock Arch Linux ISO is documented in:
 
-**→ `INSTALL.md`**
+**→ [`INSTALL.md`](INSTALL.md)**
 
 The installation guide covers the disk layout, encryption, TPM enrollment, Secure Boot, and first boot.
 
@@ -46,10 +46,10 @@ The installation guide covers the disk layout, encryption, TPM enrollment, Secur
 
 ## 🔗 References
 
-- `bootcrew/mono`
+- [`bootcrew/mono`](https://github.com/bootcrew/mono)
 
 ---
 
 ## 📜 License
 
-Licensed under the Apache License 2.0.
+Licensed under the [Apache License 2.0](LICENSE.md).

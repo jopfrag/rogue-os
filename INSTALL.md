@@ -1,6 +1,6 @@
 # Installing the sealed CachyOS bootc image from a stock Arch ISO
 
-By-hand install of `ghcr.io/jopfrag/rogue:latest`. UEFI-only. The image is always signed
+By-hand install of `ghcr.io/jopfrag/rogue-server:v1`. UEFI-only. The image is always signed
 for Secure Boot and always carries a TPM2 signed PCR policy, so Secure Boot must be enabled
 once the image's certificate is enrolled and the root is encrypted with LUKS and bound to
 the TPM. The result is sealed: composefs root with fs-verity enforced and a UKI booted by
@@ -99,7 +99,7 @@ mount "${esp}" /mnt/target/boot/efi
 ## 5. Install
 
 ```sh
-imgref=ghcr.io/jopfrag/rogue:latest
+imgref=ghcr.io/jopfrag/rogue-server:v1
 podman pull "${imgref}"
 
 podman run --rm --privileged --pid=host --ipc=host \

@@ -15,8 +15,9 @@ on:
     branches: [main, develop]
 
 env:
-  IMAGE_NAME: ghcr.io/jopfrag/rogue
-  IMAGE_TAG: ${{ github.sha }}
+  IMAGE_NAME: ghcr.io/jopfrag/rogue-server
+  IMAGE_TAG: v1
+  IMAGE_SHA_TAG: ${{ github.sha }}
 
 jobs:
   build:
@@ -62,6 +63,7 @@ jobs:
             --secret id=pcr_key,src="${RUNNER_TEMP}/signing/pcr.key" \
             --secret id=pcr_pub,src="${RUNNER_TEMP}/signing/pcr.pub" \
             --tag "${IMAGE_NAME}:${IMAGE_TAG}" \
+            --tag "${IMAGE_NAME}:${IMAGE_SHA_TAG}" \
             --tag "${IMAGE_NAME}:latest" \
             -f Containerfile .
 
@@ -76,4 +78,5 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
           podman push "${IMAGE_NAME}:${IMAGE_TAG}"
+          podman push "${IMAGE_NAME}:${IMAGE_SHA_TAG}"
           podman push "${IMAGE_NAME}:latest"
