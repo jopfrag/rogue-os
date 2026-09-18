@@ -53,6 +53,7 @@ FROM cachyos-base AS rootfs
 ARG KERNEL_PKGS
 ARG FIRMWARE_PKGS
 ARG TEST_PKGS
+ARG SIGNING_REV=0
 
 RUN pacman -Syu --noconfirm --needed \
         base \
@@ -95,9 +96,8 @@ COPY root /
 
 RUN --mount=type=secret,id=db_key \
     --mount=type=secret,id=db_cert \
-    sh -c 'set -euo pipefail; \
-      if [[ -f /run/secrets/db_key && -f /run/secrets/db_cert ]]; then \
-        pacman -S --noconfirm --needed sbsigntools; \
+    sh -c 'set -euo pipefail; echo "signing-rev=${SIGNING_REV}"; if [[ -f /run/secrets/db_key && -f /run/secrets/db_cert ]]; then \
+        pacman -Sy --noconfirm --needed sbsigntools; \
         sbsign --key /run/secrets/db_key --cert /run/secrets/db_cert \
           --output /tmp/systemd-bootx64.efi \
           /usr/lib/systemd/boot/efi/systemd-bootx64.efi; \
@@ -170,6 +170,8 @@ RUN install -d /kernel \
 
 FROM cachyos-base AS sealed-uki
 
+ARG SIGNING_REV=0
+
 RUN pacman -Sy --noconfirm --needed systemd-ukify ostree libselinux sbsigntools \
     && pacman -Scc --noconfirm
 COPY --from=bootc-builder /output/usr/bin/bootc /usr/bin/bootc
@@ -180,7 +182,7 @@ RUN --mount=type=bind,from=split,target=/target \
     --mount=type=secret,id=db_cert \
     --mount=type=secret,id=pcr_key \
     --mount=type=secret,id=pcr_pub \
-    sh -c 'set -euo pipefail; kver="$(ls /kernel)"; install -d /out/uki; args=""; if [[ -f /run/secrets/db_key && -f /run/secrets/db_cert ]]; then args="${args} --signtool sbsign --secureboot-private-key /run/secrets/db_key --secureboot-certificate /run/secrets/db_cert"; fi; if [[ -f /run/secrets/pcr_key && -f /run/secrets/pcr_pub ]]; then args="${args} --pcr-private-key /run/secrets/pcr_key --pcr-public-key /run/secrets/pcr_pub"; fi; bootc container ukify --rootfs /target --kernel-dir "/kernel/${kver}" -- ${args} --output "/out/uki/${kver}.efi"'
+    sh -c 'set -euo pipefail; echo "signing-rev=${SIGNING_REV}"; kver="$(ls /kernel)"; install -d /out/uki; args=""; if [[ -f /run/secrets/db_key && -f /run/secrets/db_cert ]]; then args="${args} --signtool sbsign --secureboot-private-key /run/secrets/db_key --secureboot-certificate /run/secrets/db_cert"; fi; if [[ -f /run/secrets/pcr_key && -f /run/secrets/pcr_pub ]]; then args="${args} --pcr-private-key /run/secrets/pcr_key --pcr-public-key /run/secrets/pcr_pub"; fi; bootc container ukify --rootfs /target --kernel-dir "/kernel/${kver}" -- ${args} --output "/out/uki/${kver}.efi"'
 
 # ---------------------------------------------------------------------------
 

@@ -72,6 +72,11 @@ at build time. Instead, pre-made `.auth` files are committed to the repository u
 `root/usr/lib/bootc/install/secureboot-keys/auto/` and copied into the image via the
 existing `COPY root /`. Regenerate them when the keys change.
 
+> **Consistency requirement:** `db_cert` **must match** the certificate baked into `db.auth`.
+> The firmware verifies `systemd-boot` and the UKI against the cert inside `db.auth`; if
+> `db_cert` differs, the image is signed but unbootable. Regenerate `db.auth` whenever
+> `db_key`/`db_cert` are rotated.
+
 Because BuildKit does not fold secret contents into the layer cache key, a signed build
 should be run with `--no-cache` (or a bumped build arg) to avoid reusing a stale unsigned
 layer:
@@ -573,6 +578,14 @@ The firmware must be in **Setup Mode** for the authenticated writes to succeed.
 
 The `.auth` files contain only public certificates (signed auth structures); no private
 keys are in the image. Regenerate them with `efitools` when the key material changes.
+
+bootc's `get_secureboot_keys()` reads `usr/lib/bootc/install/secureboot-keys/` and treats
+**every entry directly under it as a key-set directory**, bailing with
+`... is not a directory` if it finds a plain file there. It then copies only `*.auth` files
+found inside those subdirectories. The `auto/README` that documents the expected names
+therefore lives *inside* `auto/` (where non-`.auth` files are ignored), not directly under
+`secureboot-keys/`; a file placed directly under `secureboot-keys/` breaks `bootc install`
+before the bootloader is even written.
 
 ### Boot loader configuration
 
