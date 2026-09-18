@@ -9,13 +9,22 @@ and `systemd-boot` are always signed for **Secure Boot**, and the UKI always car
 **TPM2 signed PCR policy** so a LUKS root can be auto-unlocked once it is bound to the TPM
 and the Secure Boot policy (PCR 7). The signing keys are supplied as build secrets.
 
+## Features
+
+- ✅ Sealed: composefs root with fs-verity enforced
+- ✅ Unified Kernel Image (UKI) booted by systemd-boot
+- ✅ Secure Boot: signed UKI and `systemd-boot`
+- ✅ Encrypted LUKS2 root with TPM2 signed-PCR auto-unlock
+- ✅ f2fs default root filesystem
+- ✅ Unattended bootc updates and maintenance-window reboots
+
 ## Get the image
 
 ```sh
 podman pull ghcr.io/jopfrag/rogue:latest
 ```
 
-Or build it yourself. Signing is mandatory, so the four key secrets below are required:
+Or build it yourself:
 
 ```sh
 podman build \
