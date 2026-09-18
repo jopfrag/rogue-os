@@ -1,7 +1,7 @@
 # rogue-os
 
 [![Build bootc image](https://github.com/jopfrag/rogue-os/actions/workflows/build-image.yaml/badge.svg)](https://github.com/jopfrag/rogue-os/actions/workflows/build-image.yaml)
-[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE.md)
 
 A **sealed CachyOS bootc image**: a composefs root protected by fs-verity, booted from a
 Unified Kernel Image via **systemd-boot**. The default root filesystem is **f2fs**. The UKI
@@ -70,11 +70,10 @@ bootc status                                   # bootType: Uki, bootloader: syst
 | File | |
 |---|---|
 | [`INSTALL.md`](INSTALL.md) | Install from a stock Arch Linux ISO |
-| [`Containerfile.md`](Containerfile.md) | How the image is built |
-| [`LICENSE`](LICENSE) | Apache-2.0 |
+| [`LICENSE.md`](LICENSE.md) | Apache-2.0 |
 
 ## License
 
-Licensed under the [Apache License 2.0](LICENSE). The build draws on
+Licensed under the [Apache License 2.0](LICENSE.md). The build draws on
 [`bootcrew/mono`](https://github.com/bootcrew/mono) and its predecessor
 `bootcrew/arch-bootc`, and on upstream [`bootc`](https://github.com/bootc-dev/bootc).

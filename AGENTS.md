@@ -150,8 +150,7 @@ Do not spend excessive time researching when a small experiment can answer the q
 
 When behavior is uncertain, create a minimal experiment.
 
-Document important architectural discoveries in the relevant project documentation
-(README.md / Containerfile.md).
+Document important architectural discoveries in the project documentation (README.md).
 
 7. Preserve the Intended Architecture
 
@@ -169,7 +168,7 @@ determine whether there is a compatible alternative.
 
 Do not silently change the architecture.
 
-The intended architecture for this project is fixed and recorded in Containerfile.md. In particular:
+The intended architecture for this project is fixed and recorded here. In particular:
 
 - the CachyOS bootc image uses the composefs backend;
 - it boots via systemd-boot with a Unified Kernel Image (UKI);
@@ -180,7 +179,7 @@ The intended architecture for this project is fixed and recorded in Containerfil
   `root/usr/lib/bootc/install/secureboot-keys/auto/` (only public certificates);
 - bootupd must not be present in the image (its presence would select the GRUB/bootupd path instead of systemd-boot).
 
-Changing any of these requires the same investigate -> verify -> record process, and an explicit update to Containerfile.md. Do not change them silently.
+Changing any of these requires the same investigate -> verify -> record process, and an explicit documentation update. Do not change them silently.
 
 8. Keep Changes Small
 
@@ -324,7 +323,7 @@ Never use broad cleanup commands that could destroy unrelated user VMs.
 
 Keep documentation synchronized with the implementation.
 
-Use `README.md` and `Containerfile.md` where appropriate.
+Use `README.md` and `INSTALL.md` where appropriate.
 
 Do not document functionality that does not exist.
 
