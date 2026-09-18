@@ -1,4 +1,4 @@
-# Build the CachyOS bootc OCI image from Containerfile.
+# Build the CachyOS bootc OCI image from Container.server.
 #
 # Pull requests (main, develop): build only (verify the image builds).
 # Push to main: build and push to GHCR. Push to develop: build only.
@@ -65,7 +65,7 @@ jobs:
             --tag "${IMAGE_NAME}:${IMAGE_TAG}" \
             --tag "${IMAGE_NAME}:${IMAGE_SHA_TAG}" \
             --tag "${IMAGE_NAME}:latest" \
-            -f Containerfile .
+            -f Container.server .
 
       - name: Log in to GHCR
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

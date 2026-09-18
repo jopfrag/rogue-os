@@ -359,7 +359,7 @@ understand the code rather than blindly copying it;
 
 adapt it to the current project rather than introducing unnecessary dependencies.
 
-The primary reference for the image build is the bootcrew/mono repository (arch/Containerfile and shared/), the maintained successor to bootcrew/arch-bootc. Implementation lives in Containerfile.
+The primary reference for the image build is the bootcrew/mono repository (arch/Containerfile and shared/), the maintained successor to bootcrew/arch-bootc. Implementation lives in Container.server.
 
 18. Current Task Discipline
 

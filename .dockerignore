@@ -1,4 +1,4 @@
-# The build only reads Containerfile, build/ and root/. Keep the
+# The build only reads Container.server, build/ and root/. Keep the
 # context small and avoid shipping repository metadata to the builder.
 .git
 .github
