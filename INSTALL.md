@@ -36,8 +36,6 @@ warning:
 ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@<live-ip>
 ```
 
----
-
 ## 2. Scratch store and podman
 
 Run the following steps in that SSH session (i.e. on the Arch ISO), not on your
