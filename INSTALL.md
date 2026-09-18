@@ -1,8 +1,9 @@
 # Installing the sealed CachyOS bootc image from a stock Arch ISO
 
-By-hand install of `ghcr.io/jopfrag/rogue:latest`. UEFI-only; Secure Boot must be
-disabled. The result is sealed: composefs root with fs-verity enforced and an unsigned UKI
-booted by systemd-boot.
+By-hand install of `ghcr.io/jopfrag/rogue:latest`. UEFI-only; Secure Boot must be disabled
+for the default unsigned build (see "Optional: Secure Boot" below for a signed image).
+The result is sealed: composefs root with fs-verity enforced and a UKI booted by
+systemd-boot.
 
 ## Assumptions
 
@@ -114,9 +115,11 @@ umount /mnt/target
 
 ## Optional: Secure Boot
 
-Requires an image built with the `db_key`/`db_cert` secrets. The build
-embeds the `PK.auth`/`KEK.auth`/`db.auth` enrollment material; bootc copies it to
-`<ESP>/loader/keys/auto/` during install.
+Requires an image built with the `db_key`/`db_cert` secrets and the pre-made
+`PK.auth`/`KEK.auth`/`db.auth` enrollment material placed in
+`root/usr/lib/bootc/install/secureboot-keys/auto/` before the build (the upstream
+repository ships only the placeholder `auto/README`). The build embeds that material and
+bootc copies it to `<ESP>/loader/keys/auto/` during install.
 
 1. Put the target firmware into **Setup Mode** (clear its existing Secure Boot keys) and
    leave Secure Boot disabled for the first boot. Authenticated key writes are rejected

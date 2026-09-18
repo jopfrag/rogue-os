@@ -55,6 +55,13 @@ References: the upstream bootc image requirements (`bootc-dev/bootc`,
 - `TEST_PKGS` — test-only packages. Defaults to empty; `bcvk` needs `bubblewrap` inside the
   image, so the `Justfile` passes `--build-arg TEST_PKGS=bubblewrap`, while production
   builds leave it empty and ship without `bwrap`.
+- `CACHYOS_BASE` — base image reference; defaults to
+  `docker.io/cachyos/cachyos-v3:latest`. Pin it to a tag or digest for a fully reproducible
+  build (bootc is already pinned by `BOOTC_VERSION`/`BOOTC_COMMIT`).
+- `SIGNING_REV` — cache-buster for the two secret-consuming signing steps (declared per
+  stage, default `0`). BuildKit does not include secret contents in the layer cache key, so
+  bump it when rotating keys or switching between signed and unsigned builds; see
+  "Optional signing secrets".
 
 ## Optional signing secrets
 
@@ -68,9 +75,12 @@ for the full rationale.
   `ukify` to embed the `.pcrsig`/`.pcrpkey` sections.
 
 The Secure Boot enrollment material (`PK.auth`, `KEK.auth`, `db.auth`) is **not** generated
-at build time. Instead, pre-made `.auth` files are committed to the repository under
+at build time. Instead, pre-made `.auth` files are placed under
 `root/usr/lib/bootc/install/secureboot-keys/auto/` and copied into the image via the
-existing `COPY root /`. Regenerate them when the keys change.
+existing `COPY root /`. This repository ships only the placeholder `auto/README`, so an
+unsigned build carries no enrollment material; add the generated `.auth` files (public
+certificates only) before building a Secure-Boot-capable image, and regenerate them when
+the keys change.
 
 > **Consistency requirement:** `db_cert` **must match** the certificate baked into `db.auth`.
 > The firmware verifies `systemd-boot` and the UKI against the cert inside `db.auth`; if
@@ -78,17 +88,21 @@ existing `COPY root /`. Regenerate them when the keys change.
 > `db_key`/`db_cert` are rotated.
 
 Because BuildKit does not fold secret contents into the layer cache key, a signed build
-should be run with `--no-cache` (or a bumped build arg) to avoid reusing a stale unsigned
-layer:
+after an unsigned one would reuse the stale unsigned layer. Bump `SIGNING_REV` (see
+"Global build arguments") whenever the key material changes or when switching between
+signed and unsigned builds:
 
 ```sh
-podman build --no-cache \
+podman build \
+  --build-arg SIGNING_REV="$(date +%s)" \
   --secret id=db_key,src=./db.key \
   --secret id=db_cert,src=./db.crt \
   --secret id=pcr_key,src=./pcr.key \
   --secret id=pcr_pub,src=./pcr.pub \
   -t ghcr.io/jopfrag/rogue:latest -f Containerfile .
 ```
+
+A full `--no-cache` build also works but is much slower (it recompiles bootc).
 
 ## Stage 1 — bootc-builder
 
@@ -238,10 +252,11 @@ configuration reviewable as ordinary files. `COPY` preserves file modes, which m
 the executable `/usr/libexec/bootc-auto-reboot` (mode `0755`, tracked by git).
 
 The tree provides: the bootc install filesystem config and kargs, the auto-reboot
-helper/service/timer, the composefs drop-ins for the upstream update units, the
-SSH hardening drop-in, the networkd config, the `resolv.conf`
-and `/var` tmpfiles, the composefs `setup-root-conf.toml`, the dracut config, and
-`prepare-root.conf`.
+helper/service/timer, the ansible-pull helper/service/timer and `/etc/ansible/pull.env`,
+the vendored `loader.conf` and the secureboot-keys placeholder (`auto/README`), the
+composefs drop-ins for the upstream update units, the SSH hardening drop-in, the networkd
+config, the `resolv.conf` and `/var` tmpfiles, the composefs `setup-root-conf.toml`, the
+dracut config, and `prepare-root.conf`.
 
 Only genuinely dynamic content stays in `RUN`: `/etc/machine-id`, the `/etc/localtime`
 symlink, the bootc image-version marker, and the base-filesystem relayout/symlinks.
@@ -571,7 +586,8 @@ would make the digest and the on-disk rootfs disagree and fail fs-verity verific
 
 Enrolling the certificate into the target firmware is the last mile. The Secure Boot
 enrollment material — `PK.auth`, `KEK.auth` and `db.auth` — is pre-made outside the build
-and committed to the repository under `root/usr/lib/bootc/install/secureboot-keys/auto/`.
+and placed in the build context under `root/usr/lib/bootc/install/secureboot-keys/auto/`
+(this repository ships only the placeholder `auto/README`).
 `COPY root /` places them in the image, and bootc copies them to `<ESP>/loader/keys/auto/`
 at install time. `systemd-boot` then offers a one-time enrollment entry in its boot menu.
 The firmware must be in **Setup Mode** for the authenticated writes to succeed.

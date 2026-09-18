@@ -4,11 +4,15 @@
 #
 # Override via environment: IMAGE, VM, BCVK_CONNECT, DISK_SIZE, FIRMWARE, DISABLE_TPM.
 #
+# The VM name defaults to a random `rogue-os-test-<uuid>` so a run never replaces a VM it
+# did not create. Override VM= to reuse a fixed name (then `--replace` targets that name).
+# Remove a finished VM with `bcvk libvirt rm <name>`.
+#
 # Note: the install (bcvk to-disk) intermittently fails with
 # "Finalizing filesystem root: mount point is busy"; just re-run `just`.
 
 image       := env("IMAGE", "localhost/rogue:latest")
-vm          := env("VM", "rogue-test")
+vm          := env("VM", "rogue-os-test-" + uuid())
 connect     := env("BCVK_CONNECT", "qemu:///session")
 disk_size   := env("DISK_SIZE", "24G")
 firmware    := env("FIRMWARE", "uefi-insecure")

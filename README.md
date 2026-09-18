@@ -21,11 +21,15 @@ Or build it yourself:
 podman build -t ghcr.io/jopfrag/rogue:latest -f Containerfile .
 ```
 
+For a local build-and-boot loop, the [`Justfile`](Justfile) builds the image and installs
+and boots it in a disposable libvirt VM (`just`).
+
 ## Install
 
 UEFI only. **Secure Boot is optional**: an unsigned build requires it to be disabled; a
-build signed with the `secureboot_key`/`secureboot_cert` secrets works with Secure Boot
-once the certificate is enrolled. Boot a live Arch Linux environment in UEFI mode, prepare
+build signed with the `db_key`/`db_cert` (and optionally `pcr_key`/`pcr_pub`) secrets works
+with Secure Boot once the certificate is enrolled. Boot a live Arch Linux environment in
+UEFI mode, prepare
 the target disk (GPT with an EFI system partition and an f2fs root), then install the image:
 
 ```sh

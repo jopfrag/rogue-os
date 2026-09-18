@@ -18,6 +18,7 @@ if [[ -n "${vault}" ]]; then
     export ANSIBLE_VAULT_PASSWORD_FILE="${vault}"
 fi
 
+# shellcheck disable=SC2054  # the trailing comma is ansible's inline host list
 args=(
     -U "${ANSIBLE_PULL_REPO}"
     -C "${ANSIBLE_PULL_BRANCH}"

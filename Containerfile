@@ -4,8 +4,9 @@ ARG CACHYOS_MIRROR=""
 ARG KERNEL_PKGS="linux-cachyos-server-lto"
 ARG FIRMWARE_PKGS="linux-firmware amd-ucode"
 ARG TEST_PKGS=""
+ARG CACHYOS_BASE="docker.io/cachyos/cachyos-v3:latest"
 
-FROM docker.io/cachyos/cachyos-v3:latest AS cachyos-base
+FROM ${CACHYOS_BASE} AS cachyos-base
 
 ARG CACHYOS_MIRROR
 
@@ -20,7 +21,7 @@ FROM cachyos-base AS bootc-builder
 ARG BOOTC_VERSION
 ARG BOOTC_COMMIT
 
-RUN pacman -Sy --noconfirm --needed \
+RUN pacman -Syu --noconfirm --needed \
         base base-devel rust make git go-md2man pkgconf ostree glibc \
         cmake jq libselinux clang llvm patch \
     && pacman -S --clean --noconfirm
@@ -97,7 +98,7 @@ COPY root /
 RUN --mount=type=secret,id=db_key \
     --mount=type=secret,id=db_cert \
     sh -c 'set -euo pipefail; echo "signing-rev=${SIGNING_REV}"; if [[ -f /run/secrets/db_key && -f /run/secrets/db_cert ]]; then \
-        pacman -Sy --noconfirm --needed sbsigntools; \
+        pacman -Syu --noconfirm --needed sbsigntools; \
         sbsign --key /run/secrets/db_key --cert /run/secrets/db_cert \
           --output /tmp/systemd-bootx64.efi \
           /usr/lib/systemd/boot/efi/systemd-bootx64.efi; \
@@ -172,7 +173,7 @@ FROM cachyos-base AS sealed-uki
 
 ARG SIGNING_REV=0
 
-RUN pacman -Sy --noconfirm --needed systemd-ukify ostree libselinux sbsigntools \
+RUN pacman -Syu --noconfirm --needed systemd-ukify ostree libselinux \
     && pacman -Scc --noconfirm
 COPY --from=bootc-builder /output/usr/bin/bootc /usr/bin/bootc
 
@@ -182,7 +183,7 @@ RUN --mount=type=bind,from=split,target=/target \
     --mount=type=secret,id=db_cert \
     --mount=type=secret,id=pcr_key \
     --mount=type=secret,id=pcr_pub \
-    sh -c 'set -euo pipefail; echo "signing-rev=${SIGNING_REV}"; kver="$(ls /kernel)"; install -d /out/uki; args=""; if [[ -f /run/secrets/db_key && -f /run/secrets/db_cert ]]; then args="${args} --signtool sbsign --secureboot-private-key /run/secrets/db_key --secureboot-certificate /run/secrets/db_cert"; fi; if [[ -f /run/secrets/pcr_key && -f /run/secrets/pcr_pub ]]; then args="${args} --pcr-private-key /run/secrets/pcr_key --pcr-public-key /run/secrets/pcr_pub"; fi; bootc container ukify --rootfs /target --kernel-dir "/kernel/${kver}" -- ${args} --output "/out/uki/${kver}.efi"'
+    sh -c 'set -euo pipefail; echo "signing-rev=${SIGNING_REV}"; kver="$(ls /kernel)"; install -d /out/uki; args=""; if [[ -f /run/secrets/db_key && -f /run/secrets/db_cert ]]; then pacman -Syu --noconfirm --needed sbsigntools; args="${args} --signtool sbsign --secureboot-private-key /run/secrets/db_key --secureboot-certificate /run/secrets/db_cert"; fi; if [[ -f /run/secrets/pcr_key && -f /run/secrets/pcr_pub ]]; then args="${args} --pcr-private-key /run/secrets/pcr_key --pcr-public-key /run/secrets/pcr_pub"; fi; bootc container ukify --rootfs /target --kernel-dir "/kernel/${kver}" -- ${args} --output "/out/uki/${kver}.efi"'
 
 # ---------------------------------------------------------------------------
 
