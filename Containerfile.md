@@ -12,8 +12,10 @@ The image is **sealed**:
   UKI);
 - the kernel is packaged as a **Unified Kernel Image (UKI)** that carries the composefs
   digest on its kernel command line;
-- **fs-verity enforcement is on**; the UKI is deliberately **unsigned** and **Secure Boot
-  is not used**;
+- **fs-verity enforcement is on**;
+- the UKI and `systemd-boot` are **signed for Secure Boot when signing keys are supplied at
+  build time**, and the UKI carries a **signed TPM2 PCR policy** for disk-encryption
+  unlock; without keys the build produces an unsigned UKI and Secure Boot is not used;
 - the bootloader is **systemd-boot** and **bootupd is deliberately not installed** (bootc
   selects systemd-boot when bootupd is absent; installing bootupd would select the
   ostree/GRUB path instead).
@@ -27,7 +29,8 @@ fixup, so it is not repeated per stage), the build has five stages:
 1. **bootc-builder** — compile the `bootc` binary from source.
 2. **rootfs** — CachyOS base + kernel/initramfs/systemd, laid out per bootc.
 3. **split** — `bootc container split-kernel-and-rootfs` (kernel out of the rootfs).
-4. **sealed-uki** — `bootc container ukify` builds the unsigned UKI.
+4. **sealed-uki** — `bootc container ukify` builds the UKI, optionally signing it for
+   Secure Boot and with a TPM2 PCR policy.
 5. **final** — the split rootfs plus the UKI at `/boot/EFI/Linux/<kver>.efi`.
 
 References: the upstream bootc image requirements (`bootc-dev/bootc`,
@@ -52,6 +55,30 @@ References: the upstream bootc image requirements (`bootc-dev/bootc`,
 - `TEST_PKGS` — test-only packages. Defaults to empty; `bcvk` needs `bubblewrap` inside the
   image, so the `Justfile` passes `--build-arg TEST_PKGS=bubblewrap`, while production
   builds leave it empty and ship without `bwrap`.
+
+## Optional signing secrets
+
+Signing is opt-in via Podman build secrets. A plain `podman build` produces the unsigned
+image; supplying secrets produces a signed one. See "Disk encryption and Secure Boot" below
+for the full rationale.
+
+- `secureboot_key` / `secureboot_cert` — Secure Boot private key and certificate (PEM).
+  Used to sign both the UKI (in `sealed-uki`) and `systemd-boot` (in `rootfs`).
+- `pcr_key` / `pcr_pub` — PCR-policy private key and matching public key (PEM). Used by
+  `ukify` to embed the `.pcrsig`/`.pcrpkey` sections.
+
+Because BuildKit does not fold secret contents into the layer cache key, a signed build
+should be run with `--no-cache` (or a bumped build arg) to avoid reusing a stale unsigned
+layer:
+
+```sh
+podman build --no-cache \
+  --secret id=secureboot_key,src=./sb.key \
+  --secret id=secureboot_cert,src=./sb.crt \
+  --secret id=pcr_key,src=./pcr.key \
+  --secret id=pcr_pub,src=./pcr.pub \
+  -t ghcr.io/jopfrag/rogue:latest -f Containerfile .
+```
 
 ## Stage 1 — bootc-builder
 
@@ -129,6 +156,9 @@ Beyond the base system, the packages are:
 - `dracut` + `cpio` — initramfs generation.
 - `ostree` + `libselinux` — bootc dependencies (`ostree` also provides the bootc backend
   data).
+- `cryptsetup`, `tpm2-tss`, `tpm2-tools` — LUKS root and TPM2 unlock: `cryptsetup` provides
+  the userspace tools and `libcryptsetup`, `tpm2-tss` the TPM2 stacks, and `tpm2-tools` the
+  `tpm2` binary required by dracut's `tpm2-tss` module (see "Initramfs generation").
 - Filesystem tools: `e2fsprogs`, `xfsprogs`, `btrfs-progs`, `f2fs-tools`, `dosfstools`.
 - `systemd-ukify` — builds the UKI (pulls in `binutils`, `python-pefile`, …).
 - `skopeo` + `podman` + `fuse-overlayfs` — image transport/pulling and the rootless overlay
@@ -379,6 +409,15 @@ the running kernel, which is not the image's kernel).
 default root filesystem and, unlike ext4 (built-in), it is a module; without it the
 initramfs cannot mount `/sysroot` and boot drops to emergency mode.
 
+The initramfs also carries the modules needed to unlock a LUKS root with a TPM2 token:
+`add_dracutmodules+=" crypt systemd-cryptsetup tpm2-tss "` pulls in the `cryptsetup`
+helpers, `systemd-cryptsetup`, the TPM2 stacks, the
+`libcryptsetup-token-systemd-tpm2.so` token plugin, and the TPM kernel drivers (the CachyOS
+server kernel has the core `tpm`, `tpm_tis` and `tpm_crb` built in, so no TPM modules are
+needed). The `tpm2-tss` module's `check()` requires the `tpm2` binary from `tpm2-tools`,
+which is why that package is installed even though the final image does not otherwise need
+it.
+
 There must be exactly one kernel: `bootc container split-kernel-and-rootfs`/`ukify` assume a
 single kernel, and picking an arbitrary one would produce a UKI that does not match the
 loaded modules. The build **fails loudly** if there is not exactly one kernel directory.
@@ -455,8 +494,18 @@ as well (with `ostree`).
 
 `bootc container ukify` computes the composefs digest of the rootfs and bakes it (along with
 `kargs.d`) into the UKI command line. Sealing is left on: **`--allow-missing-verity` is not
-passed**. No `--signtool`/`--secureboot-*` is passed, so the UKI stays **unsigned** and
-Secure Boot is not used.
+passed**.
+
+Everything after `--` is forwarded to `ukify` unchanged. When the signing secrets are
+supplied, the build appends:
+
+- `--signtool sbsign --secureboot-private-key … --secureboot-certificate …` (from
+  `sbsigntools`), signing the UKI for Secure Boot;
+- `--pcr-private-key … --pcr-public-key …`, which makes `ukify` invoke `systemd-measure`
+  and embed a `.pcrsig`/`.pcrpkey` **signed PCR policy** (PCR 11) so a LUKS volume can be
+  bound to the image and still unlock across updates.
+
+Without the secrets the command is byte-for-byte the unsigned build.
 
 The `split` stage is mounted into this stage (`/target` read-write for the rootfs,
 `/kernel` for the extracted kernel) so `ukify` can read both.
@@ -472,3 +521,45 @@ The final sealed image is the split rootfs plus the UKI copied to `/boot/EFI/Lin
 The final lint re-validates the split image because the kernel was removed and the UKI added
 by the split/ukify steps; this guards against those steps introducing drift. The same
 `--fatal-warnings --skip runtime-deps` rationale as the rootfs-stage lint applies.
+
+## Disk encryption (LUKS) and TPM2
+
+The image supports a LUKS2-encrypted root that is auto-unlocked via a TPM2 **signed PCR
+policy combined with a literal PCR 7 binding**. As bootc's `docs/src/filesystem-encryption.md`
+recommends, disk encryption is handled independently of bootc's installer, via
+`systemd-cryptsetup`/`systemd-cryptenroll`; the binding uses a signed PCR policy rather than
+bootc's built-in `tpm2-luks`:
+
+- `ukify` embeds a `.pcrsig` (a signature over the predicted PCR 11 value) and `.pcrpkey`
+  (the matching public key) into the UKI when the PCR signing secrets are supplied.
+- `systemd-stub` copies those sections into the initrd as
+  `/.extra/tpm2-pcr-signature.json` and `/.extra/tpm2-pcr-public-key.pem`, so
+  `systemd-cryptsetup` can unlock the root with the TPM2 token.
+- Enrollment combines the signed policy with a literal **PCR 7** binding:
+  `systemd-cryptenroll --tpm2-public-key=<pub.pem> --tpm2-pcrs=7:sha256 --tpm2-device=auto`
+  (see `INSTALL.md`). The token then requires **both** a valid PCR 11 signature and the PCR
+  7 value recorded at enrollment. Every UKI signed by the same PCR key unlocks, so
+  `bootc upgrade` does not break auto-unlock; no NV-index refresh hook is needed (unlike
+  `systemd-pcrlock`). Because PCR 7 reflects the firmware's Secure Boot policy, booting with
+  Secure Boot disabled, or with changed Secure Boot keys, fails the policy and falls back
+  to the passphrase prompt.
+
+The image deliberately does **not** enable bootc's built-in `block = ["tpm2-luks"]`.
+That path calls `systemd-cryptenroll --tpm2-device=auto` with **no** `--tpm2-pcrs`, i.e. it
+binds to the mere presence of the TPM, wipes the passphrase slot (`--wipe-slot=all`), and
+carries no signed PCR policy. Disk encryption is set up with the manual `to-filesystem`
+flow and enrolled afterwards, as documented in `INSTALL.md`.
+
+### Secure Boot and the boot loader
+
+Firmware verifies `systemd-boot` before the UKI, so both must be signed with the same key.
+`systemd-boot` lives at `/usr/lib/systemd/boot/efi/systemd-bootx64.efi`, which is inside
+the composefs digest; it is therefore signed in the `rootfs` stage, **before**
+`sealed-uki` computes the digest. Signing it afterwards (for example in the final stage)
+would make the digest and the on-disk rootfs disagree and fail fs-verity verification. The
+`sbsigntools` package is installed only for the duration of that step and removed again.
+
+Enrolling the certificate into the target firmware is an install-time concern and is out of
+scope for the image. bootc can copy signed signature lists from
+`/usr/lib/bootc/install/secureboot-keys` to the ESP's `loader/keys`, or the operator can use
+`sbctl`.

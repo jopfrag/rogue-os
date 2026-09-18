@@ -3,9 +3,11 @@
 [![Build bootc image](https://github.com/jopfrag/rogue-os/actions/workflows/build-image.yaml/badge.svg)](https://github.com/jopfrag/rogue-os/actions/workflows/build-image.yaml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-A **sealed CachyOS bootc image**: a composefs root protected by fs-verity, booted from an
-**unsigned Unified Kernel Image** via **systemd-boot**. The default root filesystem is
-**f2fs**.
+A **sealed CachyOS bootc image**: a composefs root protected by fs-verity, booted from a
+Unified Kernel Image via **systemd-boot**. The default root filesystem is **f2fs**. The UKI
+and `systemd-boot` can be signed for **Secure Boot**, and a LUKS root can be auto-unlocked
+with a **TPM2 signed PCR policy** that is also bound to the Secure Boot policy (PCR 7); both
+are opt-in at build time.
 
 ## Get the image
 
@@ -21,9 +23,10 @@ podman build -t ghcr.io/jopfrag/rogue:latest -f Containerfile .
 
 ## Install
 
-UEFI only; **Secure Boot must be disabled**. Boot a live Arch Linux environment in UEFI
-mode, prepare the target disk (GPT with an EFI system partition and an f2fs root), then
-install the image:
+UEFI only. **Secure Boot is optional**: an unsigned build requires it to be disabled; a
+build signed with the `secureboot_key`/`secureboot_cert` secrets works with Secure Boot
+once the certificate is enrolled. Boot a live Arch Linux environment in UEFI mode, prepare
+the target disk (GPT with an EFI system partition and an f2fs root), then install the image:
 
 ```sh
 podman run --rm --privileged --pid=host --ipc=host \
@@ -52,7 +55,8 @@ bootc status                                   # bootType: Uki, bootloader: syst
 
 ## Requirements
 
-- x86-64-v3 (AVX2) machine, UEFI boot, Secure Boot disabled.
+- x86-64-v3 (AVX2) machine, UEFI boot. Secure Boot is optional (it must be disabled for an
+  unsigned build).
 - A target disk (it will be wiped).
 
 ## Documentation

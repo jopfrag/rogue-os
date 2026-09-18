@@ -60,6 +60,7 @@ RUN pacman -Syu --noconfirm --needed \
         ${FIRMWARE_PKGS} \
         dracut cpio \
         ostree libselinux \
+        cryptsetup tpm2-tss tpm2-tools \
         btrfs-progs e2fsprogs xfsprogs f2fs-tools dosfstools \
         systemd-ukify \
         skopeo podman fuse-overlayfs \
@@ -91,6 +92,21 @@ RUN install -d /usr/lib/sysimage/pacman \
 COPY --from=bootc-builder /output /
 
 COPY root /
+
+RUN --mount=type=secret,id=secureboot_key \
+    --mount=type=secret,id=secureboot_cert \
+    sh -c 'set -euo pipefail; \
+      if [[ -f /run/secrets/secureboot_key && -f /run/secrets/secureboot_cert ]]; then \
+        pacman -S --noconfirm --needed sbsigntools; \
+        sbsign \
+          --key /run/secrets/secureboot_key \
+          --cert /run/secrets/secureboot_cert \
+          --output /tmp/systemd-bootx64.efi \
+          /usr/lib/systemd/boot/efi/systemd-bootx64.efi; \
+        install -m 0644 /tmp/systemd-bootx64.efi /usr/lib/systemd/boot/efi/systemd-bootx64.efi; \
+        rm -f /tmp/systemd-bootx64.efi; \
+        pacman -Rns --noconfirm sbsigntools; \
+      fi'
 
 RUN systemd-sysusers /usr/lib/sysusers.d/containers.conf \
     && printf 'containers:100000:65536\n' >> /etc/subuid \
@@ -156,18 +172,22 @@ RUN install -d /kernel \
 
 FROM cachyos-base AS sealed-uki
 
-RUN pacman -Sy --noconfirm --needed systemd-ukify ostree libselinux \
+RUN pacman -Sy --noconfirm --needed systemd-ukify ostree libselinux sbsigntools \
     && pacman -Scc --noconfirm
 COPY --from=bootc-builder /output/usr/bin/bootc /usr/bin/bootc
 
 RUN --mount=type=bind,from=split,target=/target \
     --mount=type=bind,from=split,source=/kernel,target=/kernel \
-    sh -c 'set -euo pipefail && kver="$(ls /kernel)" && install -d /out && bootc container ukify --rootfs /target --kernel-dir "/kernel/${kver}" -- --output "/out/${kver}.efi"'
+    --mount=type=secret,id=secureboot_key \
+    --mount=type=secret,id=secureboot_cert \
+    --mount=type=secret,id=pcr_key \
+    --mount=type=secret,id=pcr_pub \
+    sh -c 'set -euo pipefail; kver="$(ls /kernel)"; install -d /out/uki; args=""; if [[ -f /run/secrets/secureboot_key && -f /run/secrets/secureboot_cert ]]; then args="${args} --signtool sbsign --secureboot-private-key /run/secrets/secureboot_key --secureboot-certificate /run/secrets/secureboot_cert"; fi; if [[ -f /run/secrets/pcr_key && -f /run/secrets/pcr_pub ]]; then args="${args} --pcr-private-key /run/secrets/pcr_key --pcr-public-key /run/secrets/pcr_pub"; fi; bootc container ukify --rootfs /target --kernel-dir "/kernel/${kver}" -- ${args} --output "/out/uki/${kver}.efi"'
 
 # ---------------------------------------------------------------------------
 
 FROM split AS final
-COPY --from=sealed-uki /out/*.efi /boot/EFI/Linux/
+COPY --from=sealed-uki /out/uki/*.efi /boot/EFI/Linux/
 LABEL containers.bootc=1
 ARG IMAGE_VERSION=1
 LABEL org.cachyos.bootc.image-version="${IMAGE_VERSION}"
