@@ -15,12 +15,33 @@ systemd-boot.
 
 ## 1. Live environment
 
+On the Arch ISO's physical console, as root:
+
 ```sh
 passwd
 ip -br addr          # address for `ssh root@<live-ip>`
 ```
 
+---
+
+## Connect from your workstation
+
+Run the rest of this runbook from your workstation over SSH. This uses the
+[Install Arch Linux via SSH](https://wiki.archlinux.org/title/Install_Arch_Linux_via_SSH)
+command, which accepts the live environment's host key without saving it, so
+reconnecting to a fresh ISO that reuses an address never produces a host-key
+warning:
+
+```sh
+ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null root@<live-ip>
+```
+
+---
+
 ## 2. Scratch store and podman
+
+Run the following steps in that SSH session (i.e. on the Arch ISO), not on your
+workstation.
 
 ```sh
 scratch=/dev/disk/by-label/scratch   # <-- your scratch partition
