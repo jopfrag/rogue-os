@@ -184,6 +184,11 @@ Beyond the base system, the packages are:
   `smartd` and `sysstat` services are enabled (sysstat pulls in its collect/summary/rotate
   timers); `lm_sensors` is installed but its service is left off because it needs a
   machine-specific `sensors-detect` run.
+- `fwupd` (+ `fwupd-efi`) — UEFI firmware updates. Arch ships fwupd's UEFI stub unsigned;
+  under Secure Boot fwupd only accepts a `fwupdx64.efi.signed` variant, so the `rootfs`
+  stage signs it when the Secure Boot secrets are supplied (see "Secure Boot and the boot
+  loader"). fwupd is D-Bus activated, so `fwupdmgr` works without enabling the service; the
+  `fwupd-refresh.timer` is left off and can be enabled for metadata refreshes.
 - `irqbalance` — spreads IRQs on multi-core hosts (`irqbalance.service`).
 - `jq` — used by the staged-update auto-reboot helper (see "Unattended updates").
 
@@ -559,7 +564,40 @@ the composefs digest; it is therefore signed in the `rootfs` stage, **before**
 would make the digest and the on-disk rootfs disagree and fail fs-verity verification. The
 `sbsigntools` package is installed only for the duration of that step and removed again.
 
-Enrolling the certificate into the target firmware is an install-time concern and is out of
-scope for the image. bootc can copy signed signature lists from
-`/usr/lib/bootc/install/secureboot-keys` to the ESP's `loader/keys`, or the operator can use
-`sbctl`.
+Enrolling the certificate into the target firmware is the last mile. When the Secure Boot
+secrets are supplied, the same `rootfs` step generates the EFI authenticated variable
+updates the firmware needs:
+
+- `cert-to-efi-sig-list` and `sign-efi-sig-list` (from `efitools`) turn the single
+  `secureboot_key`/`secureboot_cert` keypair into `PK.auth`, `KEK.auth` and `db.auth`. A
+  fixed timestamp keeps the output reproducible.
+- They are installed at `/usr/lib/bootc/install/secureboot-keys/auto/`, from where bootc
+  copies them to `<ESP>/loader/keys/auto/` at install time.
+- `systemd-boot` then offers a one-time enrollment entry in its boot menu. The firmware must
+  be in **Setup Mode** for the authenticated writes to succeed.
+
+No Microsoft certificates are included; `db` contains only this image's certificate. As
+above, `efitools` and `sbsigntools` exist only for the duration of the build step.
+
+The same step signs fwupd's UEFI stub: `/usr/lib/fwupd/efi/fwupdx64.efi` →
+`fwupdx64.efi.signed`. fwupd only uses the `.signed` file when Secure Boot is enabled, and
+Arch ships the stub unsigned. This signs fwupd's stub, not the firmware capsule itself: the
+capsule is signed by the hardware vendor and verified by the firmware.
+
+### Boot loader configuration
+
+`root/usr/lib/bootc/loader.conf` is the vendored `systemd-boot` configuration:
+
+```
+timeout 5
+console-mode keep
+editor no
+secure-boot-enroll if-safe
+```
+
+bootc does not copy it automatically. `/loader/loader.conf` lives on the ESP, which is
+outside the composefs image, so it can be written after `bootc install` without affecting
+the fs-verity digest; `INSTALL.md` describes the step. The `default <entry-token>-*` line
+written by `bootctl install` is preserved by appending the vendored file. `editor no` and
+`secure-boot-enroll if-safe` keep the boot menu from editing the measured command line and
+leave Secure Boot enrollment manual.

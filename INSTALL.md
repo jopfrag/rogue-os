@@ -112,12 +112,42 @@ mount -o remount,ro /mnt/target
 umount /mnt/target
 ```
 
+## Optional: Secure Boot
+
+Requires an image built with the `secureboot_key`/`secureboot_cert` secrets. The build
+embeds the `PK.auth`/`KEK.auth`/`db.auth` enrollment material; bootc copies it to
+`<ESP>/loader/keys/auto/` during install.
+
+1. Put the target firmware into **Setup Mode** (clear its existing Secure Boot keys) and
+   leave Secure Boot disabled for the first boot. Authenticated key writes are rejected
+   otherwise.
+2. After step 5 (install) and before step 7 (finalize), install the vendored boot loader
+   configuration onto the ESP. The ESP is mounted at `/mnt/target/boot/efi`; the vendored
+   file is in the image:
+
+   ```sh
+   podman run --rm "${imgref}" cat /usr/lib/bootc/loader.conf \
+       >> /mnt/target/boot/efi/loader/loader.conf
+   ```
+
+   This edits only the ESP, which is outside the composefs image, so the fs-verity digest is
+   unaffected. The `default <entry-token>-*` line written by `bootctl install` is kept.
+3. Complete step 7 and boot the installed system. `systemd-boot` lists an enrollment entry
+   for the `auto` key set; select it. It writes PK/KEK/db and reboots.
+4. Enable Secure Boot in firmware if it is not already enabled. The firmware now verifies
+   the signed `systemd-boot` and UKI, and PCR 7 reflects the enrolled policy.
+
+> Enrollment is a one-time action; once PK/KEK/db are in firmware the entry is no longer
+> offered. Changing the Secure Boot keys, or resetting firmware, changes PCR 7, so a
+> TPM-bound LUKS token must then be re-enrolled.
+
 ## Optional: encrypted root (LUKS + TPM2 auto-unlock)
 
 The runbook above installs a plain f2fs root. To encrypt the root and unlock it with the
-TPM2 **signed PCR policy** embedded in a signed UKI, replace step 4 and add an enrollment
-step before step 7. This requires an image built with the `pcr_key`/`pcr_pub` secrets; keep
-`pcr_pub` on the live medium so it can be passed to `systemd-cryptenroll`.
+TPM2 **signed PCR policy** embedded in a signed UKI, replace step 4. This requires an image
+built with the `pcr_key`/`pcr_pub` secrets. The TPM enrollment (below) happens on the
+**installed** system, after the Secure Boot steps above when Secure Boot is used, because the
+token records the PCR 7 value and PCR 7 encodes the Secure Boot policy.
 
 ### 4. Partition, format and mount (encrypted variant)
 
@@ -161,14 +191,13 @@ its GPT type GUID and unlocks it with the TPM2 token; if that does not work on y
 firmware, add `--karg=luks.uuid=<UUID of ${rootfs}>` and
 `--karg=luks.options=tpm2-device=auto,headless=true` to the install command.
 
-### Enrollment (after step 6, before step 7)
+### Enrollment (on the installed system, with Secure Boot enabled)
 
-Enroll the TPM2 token while the target disk is still available from the live medium. This
-must run on the target machine so the token binds to the target's TPM, and it must run with
-**Secure Boot enabled** and the image's `secureboot_cert` already enrolled in the firmware:
-the token records the current PCR 7 value, and PCR 7 encodes the Secure Boot policy.
-Enrolling a new keyslot prompts for the existing passphrase and leaves the passphrase
-keyslot in place:
+The token records PCR 7, which encodes the firmware's Secure Boot policy, so enroll it from
+the **installed** system after the Secure Boot steps above (or, without Secure Boot, from a
+boot of the installed system with the firmware's Secure Boot state as it will be at boot).
+Keep `pcr_pub` available on the installed system. Enrolling a new keyslot prompts for the
+existing passphrase and leaves the passphrase keyslot in place:
 
 ```sh
 systemd-cryptenroll \
@@ -178,6 +207,9 @@ systemd-cryptenroll \
     "${rootfs}"
 ```
 
+(`${rootfs}` is the LUKS partition device, e.g. `/dev/nvme0n1p2`, as seen from the installed
+system.)
+
 The token now requires **both** of the following to unlock:
 
 - **PCR 7** to hold the Secure Boot policy value recorded at enrollment, and
@@ -185,12 +217,12 @@ The token now requires **both** of the following to unlock:
 
 Booting with Secure Boot disabled, or after changing the firmware's Secure Boot keys,
 changes PCR 7, so the TPM refuses to release the key and the passphrase is requested. This
-is intentional for an unattended server.
-
-Then run step 7 (finalize) and reboot. The initramfs should unlock the root without a
-prompt; if it ever fails, the LUKS passphrase still works.
+is intentional for an unattended server. Reboot after enrolling; the initramfs should unlock
+the root without a prompt, and if it ever fails the LUKS passphrase still works.
 
 > Auto-unlock is only possible for a UKI whose `.pcrsig` was signed by `pcr_key`. Every
 > image built with the same `pcr_key` continues to unlock, so `bootc upgrade` does not break
 > it. A Secure Boot key/db change or a firmware reset does change PCR 7 and will require
-> re-enrollment; the retained passphrase slot lets you do that.
+> re-enrollment; the retained passphrase slot lets you do that. A firmware update in itself
+> changes PCR 0–3/5, which are not bound, and normally preserves the Secure Boot keys, so it
+> does not break auto-unlock.

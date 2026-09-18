@@ -71,6 +71,7 @@ RUN pacman -Syu --noconfirm --needed \
         efibootmgr \
         nftables \
         smartmontools sysstat lm_sensors irqbalance \
+        fwupd \
         jq \
     && pacman -Rns --noconfirm base-devel \
     && pacman -S --noconfirm --needed sudo diffutils \
@@ -97,7 +98,7 @@ RUN --mount=type=secret,id=secureboot_key \
     --mount=type=secret,id=secureboot_cert \
     sh -c 'set -euo pipefail; \
       if [[ -f /run/secrets/secureboot_key && -f /run/secrets/secureboot_cert ]]; then \
-        pacman -S --noconfirm --needed sbsigntools; \
+        pacman -S --noconfirm --needed sbsigntools efitools; \
         sbsign \
           --key /run/secrets/secureboot_key \
           --cert /run/secrets/secureboot_cert \
@@ -105,7 +106,26 @@ RUN --mount=type=secret,id=secureboot_key \
           /usr/lib/systemd/boot/efi/systemd-bootx64.efi; \
         install -m 0644 /tmp/systemd-bootx64.efi /usr/lib/systemd/boot/efi/systemd-bootx64.efi; \
         rm -f /tmp/systemd-bootx64.efi; \
-        pacman -Rns --noconfirm sbsigntools; \
+        if [[ -f /usr/lib/fwupd/efi/fwupdx64.efi ]]; then \
+          sbsign \
+            --key /run/secrets/secureboot_key \
+            --cert /run/secrets/secureboot_cert \
+            --output /tmp/fwupdx64.efi.signed \
+            /usr/lib/fwupd/efi/fwupdx64.efi; \
+          install -m 0644 /tmp/fwupdx64.efi.signed /usr/lib/fwupd/efi/fwupdx64.efi.signed; \
+          rm -f /tmp/fwupdx64.efi.signed; \
+        fi; \
+        install -d /usr/lib/bootc/install/secureboot-keys/auto; \
+        for v in PK KEK db; do \
+          cert-to-efi-sig-list /run/secrets/secureboot_cert "/tmp/${v}.esl"; \
+          sign-efi-sig-list -t "2026-01-01 00:00:00" \
+            -c /run/secrets/secureboot_cert \
+            -k /run/secrets/secureboot_key \
+            "${v}" "/tmp/${v}.esl" "/tmp/${v}.auth"; \
+          install -m 0644 "/tmp/${v}.auth" "/usr/lib/bootc/install/secureboot-keys/auto/${v}.auth"; \
+          rm -f "/tmp/${v}.esl" "/tmp/${v}.auth"; \
+        done; \
+        pacman -Rns --noconfirm sbsigntools efitools; \
       fi'
 
 RUN systemd-sysusers /usr/lib/sysusers.d/containers.conf \
