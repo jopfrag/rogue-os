@@ -71,7 +71,6 @@ RUN pacman -Syu --noconfirm --needed \
         efibootmgr \
         nftables \
         smartmontools sysstat lm_sensors irqbalance \
-        fwupd \
         jq \
     && pacman -Rns --noconfirm base-devel \
     && pacman -S --noconfirm --needed sudo diffutils \
@@ -106,15 +105,6 @@ RUN --mount=type=secret,id=secureboot_key \
           /usr/lib/systemd/boot/efi/systemd-bootx64.efi; \
         install -m 0644 /tmp/systemd-bootx64.efi /usr/lib/systemd/boot/efi/systemd-bootx64.efi; \
         rm -f /tmp/systemd-bootx64.efi; \
-        if [[ -f /usr/lib/fwupd/efi/fwupdx64.efi ]]; then \
-          sbsign \
-            --key /run/secrets/secureboot_key \
-            --cert /run/secrets/secureboot_cert \
-            --output /tmp/fwupdx64.efi.signed \
-            /usr/lib/fwupd/efi/fwupdx64.efi; \
-          install -m 0644 /tmp/fwupdx64.efi.signed /usr/lib/fwupd/efi/fwupdx64.efi.signed; \
-          rm -f /tmp/fwupdx64.efi.signed; \
-        fi; \
         install -d /usr/lib/bootc/install/secureboot-keys/auto; \
         for v in PK KEK db; do \
           cert-to-efi-sig-list /run/secrets/secureboot_cert "/tmp/${v}.esl"; \

@@ -223,6 +223,4 @@ the root without a prompt, and if it ever fails the LUKS passphrase still works.
 > Auto-unlock is only possible for a UKI whose `.pcrsig` was signed by `pcr_key`. Every
 > image built with the same `pcr_key` continues to unlock, so `bootc upgrade` does not break
 > it. A Secure Boot key/db change or a firmware reset does change PCR 7 and will require
-> re-enrollment; the retained passphrase slot lets you do that. A firmware update in itself
-> changes PCR 0–3/5, which are not bound, and normally preserves the Secure Boot keys, so it
-> does not break auto-unlock.
+> re-enrollment; the retained passphrase slot lets you do that.

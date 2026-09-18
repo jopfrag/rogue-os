@@ -184,11 +184,6 @@ Beyond the base system, the packages are:
   `smartd` and `sysstat` services are enabled (sysstat pulls in its collect/summary/rotate
   timers); `lm_sensors` is installed but its service is left off because it needs a
   machine-specific `sensors-detect` run.
-- `fwupd` (+ `fwupd-efi`) — UEFI firmware updates. Arch ships fwupd's UEFI stub unsigned;
-  under Secure Boot fwupd only accepts a `fwupdx64.efi.signed` variant, so the `rootfs`
-  stage signs it when the Secure Boot secrets are supplied (see "Secure Boot and the boot
-  loader"). fwupd is D-Bus activated, so `fwupdmgr` works without enabling the service; the
-  `fwupd-refresh.timer` is left off and can be enabled for metadata refreshes.
 - `irqbalance` — spreads IRQs on multi-core hosts (`irqbalance.service`).
 - `jq` — used by the staged-update auto-reboot helper (see "Unattended updates").
 
@@ -578,11 +573,6 @@ updates the firmware needs:
 
 No Microsoft certificates are included; `db` contains only this image's certificate. As
 above, `efitools` and `sbsigntools` exist only for the duration of the build step.
-
-The same step signs fwupd's UEFI stub: `/usr/lib/fwupd/efi/fwupdx64.efi` →
-`fwupdx64.efi.signed`. fwupd only uses the `.signed` file when Secure Boot is enabled, and
-Arch ships the stub unsigned. This signs fwupd's stub, not the firmware capsule itself: the
-capsule is signed by the hardware vendor and verified by the firmware.
 
 ### Boot loader configuration
 
