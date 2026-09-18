@@ -1,3 +1,1 @@
-# Local OCI registry storage, e.g. when testing bootc upgrades against a
-# registry:2 container on localhost.
-/registry-data/
+

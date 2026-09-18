@@ -1,9 +1,7 @@
-# The build only reads Containerfile, bootc-f2fs.patch and root/. Keep the
+# The build only reads Containerfile, build/ and root/. Keep the
 # context small and avoid shipping repository metadata to the builder.
 .git
 .github
 .gitignore
 .dockerignore
-AGENTS.md
 *.md
-registry-data

@@ -32,14 +32,14 @@ ENV CARGO_PROFILE_RELEASE_DEBUG=false \
     CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 \
     CARGO_PROFILE_RELEASE_PANIC=abort
 
-COPY bootc-f2fs.patch /tmp/bootc-f2fs.patch
+COPY build/bootc.patch /tmp/bootc.patch
 
 RUN --mount=type=cache,target=/root/.cargo,sharing=locked \
     --mount=type=cache,target=/build,sharing=locked \
     git clone --depth 1 --branch "${BOOTC_VERSION}" \
         https://github.com/bootc-dev/bootc.git /tmp/bootc \
     && git -C /tmp/bootc checkout "${BOOTC_COMMIT}" \
-    && git -C /tmp/bootc apply /tmp/bootc-f2fs.patch \
+    && git -C /tmp/bootc apply /tmp/bootc.patch \
     && mkdir -p /build/target \
     && ln -s /build/target /tmp/bootc/target \
     && make -C /tmp/bootc bin DESTDIR=/output \
