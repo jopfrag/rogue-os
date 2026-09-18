@@ -146,11 +146,10 @@ umount /mnt/target
 
 ## Secure Boot
 
-`db_key`/`db_cert` are required build secrets, so every image is signed. Use the pre-made
-`PK.auth`/`KEK.auth`/`db.auth` enrollment material placed in
-`root/usr/lib/bootc/install/secureboot-keys/auto/` before the build (the upstream
-repository ships only the placeholder `auto/README`). The build embeds that material and
-bootc copies it to `<ESP>/loader/keys/auto/` during install.
+`db_key`/`db_cert` are required build secrets, so every image is signed. The pre-made
+`PK.auth`/`KEK.auth`/`db.auth` enrollment material is vendored in
+`root/usr/lib/bootc/install/secureboot-keys/auto/`; the build embeds it and bootc copies it
+to `<ESP>/loader/keys/auto/` during install.
 
 1. Put the target firmware into **Setup Mode** (clear its existing Secure Boot keys) and
    leave Secure Boot disabled for the first boot. Authenticated key writes are rejected
