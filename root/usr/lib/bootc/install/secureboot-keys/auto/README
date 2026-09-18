@@ -1,8 +1,9 @@
-Place pre-made EFI authenticated-variable files here so bootc can copy them to
-the ESP during installation. systemd-boot offers a one-time enrollment entry
-when it finds them in the ESP under loader/keys/auto/.
+The files in this directory are the pre-made EFI authenticated-variable
+updates that bootc copies to <ESP>/loader/keys/auto/ during installation.
+systemd-boot then offers a one-time enrollment entry.
 
-Expected files (only *.auth files are copied to the ESP):
+systemd-boot looks for these exact names (only *.auth files are copied to the
+ESP):
 
     PK.auth    — Platform Key     (signed by pk_key, containing pk_cert)
     KEK.auth   — Key Exchange Key (signed by pk_key, containing kek_cert)
@@ -12,12 +13,7 @@ Regenerate these files with efitools (cert-to-efi-sig-list + sign-efi-sig-list)
 whenever the key material changes. The db.auth certificate must match the
 db_cert supplied to the build; if they diverge the signed image is unbootable.
 
-This README (and any other non-*.auth file here) is ignored by bootc and is
-never copied to the ESP. It exists only to keep the auto/ directory in git. An
-auto/ directory with no .auth files means the image ships no enrolment material;
-because the build always signs, the image can then only be booted if the
-firmware already trusts the build's db certificate.
-
-Do NOT add plain files directly under secureboot-keys/: bootc requires every
-entry there to be a directory (each one is a key set), and fails
-`bootc install` with "is not a directory" otherwise.
+Any non-*.auth file here (such as this README) is ignored by bootc and is never
+copied to the ESP. Do NOT add plain files directly under secureboot-keys/:
+bootc requires every entry there to be a directory (each one is a key set), and
+fails `bootc install` with "is not a directory" otherwise.
