@@ -31,34 +31,32 @@ jobs:
 
       - name: Install podman
         run: |
+          set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y podman
 
-      - name: Prepare signing secrets
+      - name: Compute image date tag
+        id: meta
+        run: |
+          set -euo pipefail
+          echo "date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
+
+      - name: Build image
+        # Secrets are passed straight from the environment via type=env and
+        # never written to disk on the runner.
         env:
           DB_KEY: ${{ secrets.DB_KEY }}
           PCR_KEY: ${{ secrets.PCR_KEY }}
         run: |
-          if [ -z "${DB_KEY}" ] || [ -z "${PCR_KEY}" ]; then
+          set -euo pipefail
+          if [ -z "${DB_KEY:-}" ] || [ -z "${PCR_KEY:-}" ]; then
             echo "::error::The build always signs for Secure Boot and embeds a TPM2 PCR policy; repository secrets DB_KEY and PCR_KEY are required."
             exit 1
           fi
-          secrets="${RUNNER_TEMP}/signing"
-          install -d -m 0700 "${secrets}"
-          printf '%s\n' "${DB_KEY}"  > "${secrets}/db.key"
-          printf '%s\n' "${PCR_KEY}" > "${secrets}/pcr.key"
-          chmod 0600 "${secrets}"/*
-
-      - name: Compute image date tag
-        id: meta
-        run: echo "date=$(date -u +%Y%m%d)" >> "$GITHUB_OUTPUT"
-
-      - name: Build image
-        run: |
           podman build \
             --build-arg SIGNING_REV="${GITHUB_SHA}" \
-            --secret id=db_key,src="${RUNNER_TEMP}/signing/db.key" \
-            --secret id=pcr_key,src="${RUNNER_TEMP}/signing/pcr.key" \
+            --secret id=db_key,type=env,env=DB_KEY \
+            --secret id=pcr_key,type=env,env=PCR_KEY \
             --tag "${IMAGE_NAME}:${{ steps.meta.outputs.date }}" \
             --tag "${IMAGE_NAME}:${IMAGE_TAG}" \
             --tag "${IMAGE_NAME}:latest" \
@@ -66,14 +64,19 @@ jobs:
 
       - name: Log in to GHCR
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_ACTOR: ${{ github.actor }}
         run: |
-          echo "${{ secrets.GITHUB_TOKEN }}" | podman login ghcr.io \
-            --username "${{ github.actor }}" \
+          set -euo pipefail
+          echo "${GH_TOKEN}" | podman login ghcr.io \
+            --username "${GH_ACTOR}" \
             --password-stdin
 
       - name: Push image
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
+          set -euo pipefail
           podman push "${IMAGE_NAME}:${{ steps.meta.outputs.date }}"
           podman push "${IMAGE_NAME}:${IMAGE_TAG}"
           podman push "${IMAGE_NAME}:latest"
