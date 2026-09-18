@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodic ansible-pull
+
+[Timer]
+OnBootSec=5min
+OnUnitInactiveSec=1h
+RandomizedDelaySec=15min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

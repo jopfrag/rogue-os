@@ -1,0 +1,34 @@
+#!/bin/bash
+set -euo pipefail
+
+: "${ANSIBLE_PULL_REPO:?ANSIBLE_PULL_REPO must be set (see /etc/ansible/pull.env)}"
+: "${ANSIBLE_PULL_BRANCH:=main}"
+: "${ANSIBLE_PULL_PLAYBOOK:=local.yml}"
+: "${ANSIBLE_PULL_DIR:=/var/lib/ansible/pull}"
+: "${ANSIBLE_PULL_VERIFY_COMMIT:=yes}"
+
+# Prefer a systemd credential over a plain file for the vault password.
+vault="${ANSIBLE_VAULT_PASSWORD_FILE:-}"
+if [[ -n "${CREDENTIALS_DIRECTORY:-}" && -f "${CREDENTIALS_DIRECTORY}/vault" ]]; then
+    vault="${CREDENTIALS_DIRECTORY}/vault"
+elif [[ -z "${vault}" && -f /etc/ansible/vault.pw ]]; then
+    vault=/etc/ansible/vault.pw
+fi
+if [[ -n "${vault}" ]]; then
+    export ANSIBLE_VAULT_PASSWORD_FILE="${vault}"
+fi
+
+args=(
+    -U "${ANSIBLE_PULL_REPO}"
+    -C "${ANSIBLE_PULL_BRANCH}"
+    -d "${ANSIBLE_PULL_DIR}"
+    -i localhost,
+    -c local
+    "${ANSIBLE_PULL_PLAYBOOK}"
+    --only-if-changed
+)
+if [[ "${ANSIBLE_PULL_VERIFY_COMMIT}" == "yes" ]]; then
+    args+=(--verify-commit)
+fi
+
+exec /usr/bin/ansible-pull "${args[@]}"

@@ -1,0 +1,16 @@
+[Unit]
+Description=ansible-pull (apply local configuration)
+Documentation=man:ansible-pull(1)
+After=network-online.target
+Wants=network-online.target
+ConditionKernelCommandLine=composefs
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/ansible/pull.env
+Environment=GIT_TERMINAL_PROMPT=0
+Environment=ANSIBLE_COLLECTIONS_PATH=/var/lib/ansible/collections
+ExecCondition=/usr/bin/grep -qE ^ANSIBLE_PULL_REPO=.+ /etc/ansible/pull.env
+ExecStart=/usr/libexec/ansible-pull-run
+Nice=10
+IOSchedulingClass=idle

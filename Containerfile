@@ -65,6 +65,7 @@ RUN pacman -Syu --noconfirm --needed \
         skopeo podman fuse-overlayfs \
         dbus dbus-glib glib2 shadow \
         openssh \
+        ansible-core \
         ${TEST_PKGS} \
         efibootmgr \
         nftables \
@@ -100,6 +101,7 @@ RUN systemctl enable systemd-networkd systemd-resolved systemd-timesyncd sshd \
         smartd.service \
         sysstat.service \
         irqbalance.service \
+        ansible-pull.timer \
     && systemctl set-default multi-user.target \
     && systemctl mask systemd-firstboot.service
 

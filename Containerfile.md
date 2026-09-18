@@ -136,6 +136,9 @@ Beyond the base system, the packages are:
 - `systemd` (from `base`) also ships systemd-boot (`bootctl` + `systemd-bootx64.efi`), so no
   separate systemd-boot package is required. **`bootupd` is deliberately not installed.**
 - `dbus` + `dbus-glib` + `glib2`, `shadow`, `openssh` — userspace.
+- `ansible-core` — provides `ansible-pull` for local configuration management (see
+  "ansible-pull"). The full `ansible` metapackage (collections bundle) is deliberately not
+  installed.
 - `${TEST_PKGS}` — test-only packages. `bcvk` (the rootless test tool) re-execs itself
   through a bubblewrap namespace inside a container created from this image, and refuses to
   run if `bwrap` is absent; the `Justfile` therefore builds with
@@ -248,10 +251,34 @@ bakes into the UKI:
 - `fstrim.timer` — periodic TRIM for the f2fs root.
 - `nftables.service` — the firewall described above.
 - `smartd.service`, `sysstat.service`, `irqbalance.service` — telemetry and IRQ balancing.
+- `ansible-pull.timer` — periodic pull-based configuration (see "ansible-pull").
 - `systemd-firstboot.service` is **masked** to avoid first-boot interactive prompts.
 
 The default target is set to `multi-user.target` (`systemctl set-default`); no graphical
 stack is installed.
+
+### ansible-pull
+
+`ansible-pull.timer` runs `ansible-pull.service` hourly (plus 5 minutes after boot) to
+apply machine-local configuration from a git repository. The mechanism is image-managed;
+the repository is configured in `/etc/ansible/pull.env`:
+
+- `ANSIBLE_PULL_REPO` — git URL. While empty the service is skipped (`ExecCondition`), so
+  the timer is harmless on an unconfigured host.
+- `ANSIBLE_PULL_BRANCH`, `ANSIBLE_PULL_PLAYBOOK`, `ANSIBLE_PULL_DIR` — defaults `main`,
+  `local.yml`, `/var/lib/ansible/pull`.
+- `ANSIBLE_PULL_VERIFY_COMMIT=yes` (default) passes `--verify-commit`, so the checked-out
+  commit must carry a valid GPG signature from a key in the root keyring.
+- `/usr/libexec/ansible-pull-run` is the wrapper: it builds the `ansible-pull` arguments and
+  selects the vault password (a systemd credential named `vault` if present, otherwise
+  `/etc/ansible/vault.pw`).
+
+Bootc constraints: the repository is executed as **root**, so it is cloned with
+`GIT_TERMINAL_PROMPT=0` and should be public-safe (secrets via `ansible-vault`, signed
+commits, branch protection). The playbook must only manage `/etc` and `/var`; `/usr` is the
+sealed composefs and is updated by bootc, so package installation is not possible. Extra
+collections belong in `/var/lib/ansible/collections` (`ANSIBLE_COLLECTIONS_PATH`), not
+`/usr/share/ansible`.
 
 ### Machine identity
 
