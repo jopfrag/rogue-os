@@ -1,0 +1,10 @@
+# Podman/container veth links are owned by netavark, not systemd-networkd.
+#
+# veth interfaces have no udev DEVTYPE, so they resolve to Type=ether and would
+# otherwise be caught by 20-wired.network (the physical-link DHCP config). This
+# file sorts before it, matches the veth kind, and marks it unmanaged.
+[Match]
+Kind=veth
+
+[Link]
+Unmanaged=yes

@@ -338,6 +338,10 @@ ignored. Production images track a registry reference such as `ghcr.io/jopfrag/r
 - `/usr/lib/systemd/network/20-wired.network` brings up wired ethernet via DHCP.
   systemd-networkd ignores interfaces without a `.network` file; matching `Type=ether`
   catches `eth0`/`ens3`/etc. (including the QEMU virtio NIC).
+- `/usr/lib/systemd/network/10-podman-veth.network` matches `Kind=veth` and marks it
+  `Unmanaged=yes`. veth has no udev `DEVTYPE=`, so it resolves to `Type=ether` and would
+  otherwise be caught by `20-wired.network` (DHCP on every container veth); the `10-` prefix
+  makes this file take precedence.
 - `/usr/lib/tmpfiles.d/resolv-conf.conf` points `/etc/resolv.conf` at systemd-resolved's
   stub, created via tmpfiles at boot (`resolv.conf` is bind-mounted by the container runtime
   during build).
