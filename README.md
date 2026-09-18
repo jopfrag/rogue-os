@@ -72,8 +72,13 @@ bootc status                                   # bootType: Uki, bootloader: syst
 | [`INSTALL.md`](INSTALL.md) | Install from a stock Arch Linux ISO |
 | [`LICENSE.md`](LICENSE.md) | Apache-2.0 |
 
+## References
+
+The build draws on [`bootcrew/mono`](https://github.com/bootcrew/mono) (its
+`arch/Containerfile` and `shared/`), the maintained successor to
+`bootcrew/arch-bootc`, and on upstream
+[`bootc`](https://github.com/bootc-dev/bootc).
+
 ## License
 
-Licensed under the [Apache License 2.0](LICENSE.md). The build draws on
-[`bootcrew/mono`](https://github.com/bootcrew/mono) and its predecessor
-`bootcrew/arch-bootc`, and on upstream [`bootc`](https://github.com/bootc-dev/bootc).
+Licensed under the [Apache License 2.0](LICENSE.md).
